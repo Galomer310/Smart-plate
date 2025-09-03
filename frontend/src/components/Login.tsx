@@ -1,47 +1,51 @@
-// src/components/Login.tsx
-
+// frontend/src/components/Login.tsx
 import React, { useState } from "react";
-import axios from "axios";
 import { useDispatch } from "react-redux";
-import { login } from "../store/authSlice";
 import { useNavigate } from "react-router-dom";
+import api from "../api";
+import { login } from "../store/authSlice";
+
+type UserLoginResponse = {
+  user: any;
+  tokens: { accessToken: string };
+};
 
 const Login: React.FC = () => {
-  // Local state for login credentials
   const [credentials, setCredentials] = useState({ email: "", password: "" });
-  const dispatch = useDispatch(); // Redux dispatch hook
-  const navigate = useNavigate(); // Navigation hook
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
 
-  // Update credentials state on input change
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCredentials({ ...credentials, [e.target.name]: e.target.value });
   };
 
-  // Handle login form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Send login request to backend
-      const response = await axios.post(
-        "http://localhost:5000/api/auth/login",
+      // Use the shared API client (withCredentials: true) to set refresh cookie
+      const { data } = await api.post<UserLoginResponse>(
+        "/api/auth/login",
         credentials
       );
-      console.log("Login successful:", response.data);
-      // Dispatch login action to update Redux state
-      dispatch(login(response.data));
-      // Navigate to personal area after successful login
+
+      const accessToken = data.tokens.accessToken;
+
+      // Persist for api.ts interceptor
+      localStorage.setItem("accessToken", accessToken);
+
+      // Keep Redux in sync (authSlice expects { token, user })
+      dispatch(login({ token: accessToken, user: data.user }));
+
       navigate("/personal");
     } catch (error: any) {
       console.error("Login error:", error);
-      // Alert the user with the error message from the backend
-      alert(error.response.data.error);
+      alert(error?.response?.data?.error || "Login failed");
     }
   };
 
   return (
     <div>
       <h2>Login</h2>
-      {/* Login form */}
       <form onSubmit={handleSubmit}>
         <input
           type="email"

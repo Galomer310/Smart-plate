@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import { PORT, FRONTEND_ORIGIN } from "./env";
 import authRoutes from "../routes/auth.routes";
 import adminRoutes from "../routes/admin.routes";
+import userRoutes from "../routes/user.routes";
 
 const app = express();
 app.use(express.json());
@@ -20,6 +21,7 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/user", userRoutes);
 
 app.listen(PORT, () => {
   console.log(`Smart-plate API listening on http://localhost:${PORT}`);

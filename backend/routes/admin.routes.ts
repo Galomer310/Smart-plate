@@ -38,7 +38,7 @@ router.post("/login", async (req, res) => {
 });
 
 /** DASHBOARD LIST (admin-only) */
-router.get("/dashboard", requireAuth, requireAdmin, async (_req: AuthedRequest, res) => {
+router.get("/dashboard", requireAuth, requireAdmin, async (_req, res) => {
   const { rows } = await pool.query(`
     SELECT
       u.id,
@@ -46,18 +46,46 @@ router.get("/dashboard", requireAuth, requireAdmin, async (_req: AuthedRequest, 
       u.name,
       COALESCE(u.age, 0) AS age,
       u.diet_time,
-      COALESCE(p.height, NULL) AS height,
-      COALESCE(p.weight, NULL) AS weight,
+      -- from profile (legacy)
+      COALESCE(p.height, NULL) AS height_profile,
+      COALESCE(p.weight, NULL) AS weight_profile,
       COALESCE(p.subscription_plan, NULL) AS subscription_plan,
       COALESCE(p.subscription_price, NULL) AS subscription_price,
-      COALESCE(p.training_category, NULL) AS training_category
+      COALESCE(p.training_category, NULL) AS training_category,
+      -- from questionnaire
+      q.height,
+      q.weight,
+      q.age       AS q_age,
+      q.allergies,
+      q.program_goal,
+      q.body_improvement,
+      q.medical_issues,
+      q.takes_medications,
+      q.pregnant_or_postpartum,
+      q.menopause_symptoms,
+      q.breakfast_regular,
+      q.digestion_issues,
+      q.snacking_between_meals,
+      q.organized_eating,
+      q.avoid_food_groups,
+      q.water_intake,
+      q.diet_type,
+      q.regular_activity,
+      q.training_place,
+      q.training_frequency,
+      q.activity_type,
+      q.body_feeling,
+      q.sleep_hours,
+      q.submitted_at
     FROM users u
     LEFT JOIN user_profile p ON p.user_id = u.id
+    LEFT JOIN user_questionnaire q ON q.user_id = u.id
     WHERE u.role='user'
     ORDER BY u.created_at DESC
   `);
   res.json({ users: rows });
 });
+
 
 /** CREATE USER (admin-only) — only 4 fields required */
 router.post("/users", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
