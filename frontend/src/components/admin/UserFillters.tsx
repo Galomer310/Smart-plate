@@ -7,10 +7,7 @@ export type Filters = {
   bmi: "" | "green" | "yellow" | "red";
 };
 
-type Props = {
-  filters: Filters;
-  onChange: (next: Filters) => void;
-};
+type Props = { filters: Filters; onChange: (next: Filters) => void };
 
 const UserFilters: React.FC<Props> = ({ filters, onChange }) => {
   const update =
@@ -19,33 +16,34 @@ const UserFilters: React.FC<Props> = ({ filters, onChange }) => {
       onChange({ ...filters, [k]: e.target.value });
 
   return (
-    <div
-      style={{
-        marginBottom: "1rem",
-        display: "flex",
-        flexWrap: "wrap",
-        gap: "0.5rem",
-      }}
-    >
+    <div className="sp-filters">
       <input
+        className="sp-input"
         name="name"
         placeholder="Filter by Name"
         value={filters.name}
         onChange={update("name")}
       />
       <input
+        className="sp-input"
         name="age"
         placeholder="Filter by Age"
         value={filters.age}
         onChange={update("age")}
       />
       <input
+        className="sp-input"
         name="plan"
         placeholder="Filter by Diet Time"
         value={filters.plan}
         onChange={update("plan")}
       />
-      <select name="bmi" value={filters.bmi} onChange={update("bmi")}>
+      <select
+        className="sp-select"
+        name="bmi"
+        value={filters.bmi}
+        onChange={update("bmi")}
+      >
         <option value="">BMI: Any</option>
         <option value="green">BMI: Normal (Green)</option>
         <option value="yellow">BMI: Under (Yellow)</option>

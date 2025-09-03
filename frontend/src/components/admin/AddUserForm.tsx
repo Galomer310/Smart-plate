@@ -1,9 +1,7 @@
 import React, { useState } from "react";
 import api from "../../api";
 
-type Props = {
-  onCreated: () => void;
-};
+type Props = { onCreated: () => void };
 
 const AddUserForm: React.FC<Props> = ({ onCreated }) => {
   const [newUser, setNewUser] = useState({
@@ -32,52 +30,39 @@ const AddUserForm: React.FC<Props> = ({ onCreated }) => {
   };
 
   return (
-    <div
-      style={{
-        margin: "1rem 0",
-        padding: "1rem",
-        border: "1px solid #ddd",
-        borderRadius: 8,
-      }}
-    >
+    <div className="sp-card">
       <h2 style={{ marginTop: 0 }}>Add New User</h2>
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: "0.75rem",
-        }}
-      >
+      <form onSubmit={handleSubmit} className="sp-grid">
         <input
+          className="sp-input"
           placeholder="Name"
           value={newUser.name}
           onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
         />
         <input
+          className="sp-input"
           type="email"
           placeholder="Email"
           value={newUser.email}
           onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
         />
         <input
+          className="sp-input"
           type="password"
           placeholder="Password"
           value={newUser.password}
           onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
         />
         <input
+          className="sp-input"
           placeholder="Diet time (e.g., 12 weeks)"
           value={newUser.dietTime}
           onChange={(e) => setNewUser({ ...newUser, dietTime: e.target.value })}
         />
         <button
           type="submit"
-          style={{
-            gridColumn: "span 4",
-            padding: "0.6rem",
-            cursor: "pointer",
-          }}
+          className="sp-btn"
+          style={{ gridColumn: "1 / -1" }}
         >
           Create User
         </button>

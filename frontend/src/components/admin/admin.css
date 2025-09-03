@@ -1,0 +1,77 @@
+/* Container */
+.sp-container { padding: 1rem; }
+
+/* Card */
+.sp-card {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fff;
+}
+
+/* Responsive grid (forms) */
+.sp-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+@media (max-width: 900px) {
+  .sp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .sp-grid { grid-template-columns: 1fr; }
+}
+
+/* Inputs */
+.sp-input, .sp-select, .sp-textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+/* Filters */
+.sp-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.sp-filters > * {
+  flex: 1 1 200px;
+}
+
+/* Table */
+.sp-table-wrapper { width: 100%; overflow-x: auto; }
+.sp-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+.sp-th, .sp-td { border: 1px solid #ddd; padding: 8px; }
+.sp-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+@media (max-width: 700px) {
+  .sp-actions { flex-direction: row; flex-wrap: wrap; }
+}
+
+/* Buttons */
+.sp-btn {
+  padding: 0.5rem;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  background: #f7f7f7;
+  border-radius: 6px;
+}
+.sp-btn:hover { background: #eee; }
+
+/* Modal */
+.sp-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center; z-index: 9999;
+}
+.sp-modal {
+  background: #fff; max-width: 900px; width: 95%; padding: 16px; border-radius: 8px;
+  max-height: 90vh; overflow: auto;
+}

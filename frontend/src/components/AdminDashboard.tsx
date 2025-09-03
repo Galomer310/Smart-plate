@@ -2,6 +2,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 
+import "./admin/admin.css"; // ✅ add this line
+
 import AddUserForm from "./admin/AddUserForm";
 import UserFilters, { type Filters } from "./admin/UserFillters";
 import UsersTable from "./admin/UsearsTable";
@@ -33,7 +35,6 @@ const AdminDashboard: React.FC = () => {
     if (adminToken) fetchUsers();
   }, [adminToken]);
 
-  // ----- actions -----
   const handleDelete = async (userId: string, userEmail: string) => {
     const confirmDelete = window.confirm(
       `Are you sure you want to delete user ${userEmail}?`
@@ -53,6 +54,7 @@ const AdminDashboard: React.FC = () => {
     userId: string,
     currentPlan: string | null
   ) => {
+    // kept for future use; not rendered in the table currently
     const planDescription = window.prompt(
       "Enter the subscription plan description:",
       currentPlan || ""
@@ -86,7 +88,6 @@ const AdminDashboard: React.FC = () => {
     window.location.href = `/messages/conversation/${userId}`;
   };
 
-  // ----- filtering -----
   const filteredUsers = useMemo(() => {
     const nameQ = filters.name.trim().toLowerCase();
     const planQ = filters.plan.trim().toLowerCase();
@@ -94,45 +95,33 @@ const AdminDashboard: React.FC = () => {
     const bmiQ = filters.bmi; // '', 'green', 'yellow', 'red'
 
     return users.filter((u) => {
-      // Name contains
       if (nameQ) {
         const n = (u.name || "").toLowerCase();
         if (!n.includes(nameQ)) return false;
       }
-
-      // Age equals (prefer questionnaire age)
       if (ageQ) {
         const ageVal = u.q_age ?? u.age;
         if (String(ageVal) !== ageQ) return false;
       }
-
-      // Diet time contains
       if (planQ) {
         const d = (u.diet_time || "").toLowerCase();
         if (!d.includes(planQ)) return false;
       }
-
-      // BMI category equals (if specified)
       if (bmiQ) {
         const { category } = computeBMI(u);
         if (category !== bmiQ) return false;
       }
-
       return true;
     });
   }, [users, filters]);
 
   return (
-    <div style={{ padding: "1rem" }}>
+    <div className="sp-container">
       <h1>Admin Dashboard</h1>
 
-      {/* Add user */}
       <AddUserForm onCreated={fetchUsers} />
-
-      {/* Filters */}
       <UserFilters filters={filters} onChange={setFilters} />
 
-      {/* Users table (Name, Age, Goal, BMI, Diet Time, Actions) */}
       <UsersTable
         users={filteredUsers}
         onDelete={handleDelete}

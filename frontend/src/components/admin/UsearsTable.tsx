@@ -1,192 +1,113 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import type { User } from "./types";
 import { computeBMI } from "./bmi";
 
 type Props = {
   users: User[];
   onDelete: (id: string, email: string) => void;
-  onPlanUpdate: (id: string, currentPlan: string | null) => void;
+  onPlanUpdate: (id: string, currentPlan: string | null) => void; // kept for future, not rendered
   onMessage: (id: string) => void;
 };
 
-const UsersTable: React.FC<Props> = ({
-  users,
-  onDelete,
-  onPlanUpdate,
-  onMessage,
-}) => {
-  const navigate = useNavigate();
+const UsersTable: React.FC<Props> = ({ users, onDelete, onMessage }) => {
   const [detailsUser, setDetailsUser] = useState<User | null>(null);
 
   return (
     <>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            {/* ID removed. Height/Weight removed. */}
-            <th style={{ border: "1px solid #ddd", padding: 8 }}>Name</th>
-            <th style={{ border: "1px solid #ddd", padding: 8 }}>Age</th>
-            <th style={{ border: "1px solid #ddd", padding: 8 }}>Goal</th>
-            <th style={{ border: "1px solid #ddd", padding: 8 }}>BMI</th>
-            <th style={{ border: "1px solid #ddd", padding: 8 }}>Diet Time</th>
-            <th style={{ border: "1px solid #ddd", padding: 8 }}>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => {
-            const ageToShow = u.q_age ?? u.age;
-            const goalToShow = u.program_goal ?? "—";
-            const { bmi, label, color } = computeBMI(u);
-            const bmiDisplay = bmi === null ? "—" : `${bmi} (${label})`;
+      <div className="sp-table-wrapper">
+        <table className="sp-table">
+          <thead>
+            <tr>
+              <th className="sp-th">Name</th>
+              <th className="sp-th">Age</th>
+              <th className="sp-th">Goal</th>
+              <th className="sp-th">BMI</th>
+              <th className="sp-th">Diet Time</th>
+              <th className="sp-th">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => {
+              const ageToShow = u.q_age ?? u.age;
+              const goalToShow = u.program_goal ?? "—";
+              const { bmi, label, color } = computeBMI(u);
+              const bmiDisplay = bmi === null ? "—" : `${bmi} (${label})`;
 
-            return (
-              <tr key={u.id}>
-                <td style={{ border: "1px solid #ddd", padding: 8 }}>
-                  {u.name || "—"}
-                </td>
-                <td style={{ border: "1px solid #ddd", padding: 8 }}>
-                  {ageToShow}
-                </td>
-                <td style={{ border: "1px solid #ddd", padding: 8 }}>
-                  {goalToShow}
-                </td>
-                <td
-                  style={{
-                    border: "1px solid #ddd",
-                    padding: 8,
-                    background: color,
-                    fontWeight: 600,
-                  }}
-                >
-                  {bmiDisplay}
-                </td>
-                <td style={{ border: "1px solid #ddd", padding: 8 }}>
-                  {u.diet_time || "N/A"}
-                </td>
-                <td
-                  style={{
-                    border: "1px solid #ddd",
-                    padding: 8,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
-                  }}
-                >
-                  <button
-                    onClick={() => onDelete(u.id, u.email)}
-                    style={{ padding: "0.5rem", cursor: "pointer" }}
+              return (
+                <tr key={u.id}>
+                  <td className="sp-td">{u.name || "—"}</td>
+                  <td className="sp-td">{ageToShow}</td>
+                  <td className="sp-td">{goalToShow}</td>
+                  <td
+                    className="sp-td"
+                    style={{ background: color, fontWeight: 600 }}
                   >
-                    Delete
-                  </button>
-                  <button
-                    onClick={() =>
-                      onPlanUpdate(u.id, u.subscription_plan ?? null)
-                    }
-                    style={{ padding: "0.5rem", cursor: "pointer" }}
-                  >
-                    {u.subscription_plan ? "Edit Plan" : "Choose a Plan"}
-                  </button>
-                  <button
-                    onClick={() => onMessage(u.id)}
-                    style={{ padding: "0.5rem", cursor: "pointer" }}
-                  >
-                    Message
-                  </button>
-                  <button
-                    onClick={() => navigate(`/plans-constructor/${u.id}`)}
-                    style={{ padding: "0.5rem", cursor: "pointer" }}
-                  >
-                    Add Work Out Plan
-                  </button>
-                  <button
-                    onClick={() => setDetailsUser(u)}
-                    style={{ padding: "0.5rem", cursor: "pointer" }}
-                  >
-                    Details
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                    {bmiDisplay}
+                  </td>
+                  <td className="sp-td">{u.diet_time || "N/A"}</td>
+                  <td className="sp-td">
+                    <div className="sp-actions">
+                      <button
+                        className="sp-btn"
+                        onClick={() => onDelete(u.id, u.email)}
+                      >
+                        Delete
+                      </button>
+                      <button
+                        className="sp-btn"
+                        onClick={() => onMessage(u.id)}
+                      >
+                        Message
+                      </button>
+                      <button
+                        className="sp-btn"
+                        onClick={() => setDetailsUser(u)}
+                      >
+                        Details
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
-      {/* Details Dialog (includes ID + full questionnaire, plus BMI row) */}
+      {/* Details Modal */}
       {detailsUser && (
-        <div
-          onClick={() => setDetailsUser(null)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.35)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: "#fff",
-              maxWidth: 900,
-              width: "95%",
-              padding: 16,
-              borderRadius: 8,
-              maxHeight: "90vh",
-              overflow: "auto",
-            }}
-          >
+        <div className="sp-modal-overlay" onClick={() => setDetailsUser(null)}>
+          <div className="sp-modal" onClick={(e) => e.stopPropagation()}>
             <h3 style={{ marginTop: 0 }}>Details – {detailsUser.email}</h3>
-
             {(() => {
               const { bmi, label, color } = computeBMI(detailsUser);
               const bmiDisplay = bmi === null ? "—" : `${bmi} (${label})`;
               return (
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <table className="sp-table" style={{ minWidth: 0 }}>
                   <tbody>
-                    {/* ID now only in details */}
                     <tr>
                       <td
-                        style={{
-                          border: "1px solid #ddd",
-                          padding: 8,
-                          fontWeight: 600,
-                          width: 240,
-                        }}
+                        className="sp-td"
+                        style={{ fontWeight: 600, width: 240 }}
                       >
                         ID
                       </td>
-                      <td style={{ border: "1px solid #ddd", padding: 8 }}>
-                        {detailsUser.id}
-                      </td>
+                      <td className="sp-td">{detailsUser.id}</td>
                     </tr>
-
-                    {/* BMI row */}
                     <tr>
                       <td
-                        style={{
-                          border: "1px solid #ddd",
-                          padding: 8,
-                          fontWeight: 600,
-                          width: 240,
-                        }}
+                        className="sp-td"
+                        style={{ fontWeight: 600, width: 240 }}
                       >
                         BMI (18.5–24.9 Normal)
                       </td>
                       <td
-                        style={{
-                          border: "1px solid #ddd",
-                          padding: 8,
-                          background: color,
-                          fontWeight: 600,
-                        }}
+                        className="sp-td"
+                        style={{ background: color, fontWeight: 600 }}
                       >
                         {bmiDisplay}
                       </td>
                     </tr>
-
                     {[
                       [
                         "גובה",
@@ -225,30 +146,20 @@ const UsersTable: React.FC<Props> = ({
                     ].map(([k, v]) => (
                       <tr key={String(k)}>
                         <td
-                          style={{
-                            border: "1px solid #ddd",
-                            padding: 8,
-                            fontWeight: 600,
-                            width: 240,
-                          }}
+                          className="sp-td"
+                          style={{ fontWeight: 600, width: 240 }}
                         >
                           {k as string}
                         </td>
-                        <td style={{ border: "1px solid #ddd", padding: 8 }}>
-                          {String(v ?? "—")}
-                        </td>
+                        <td className="sp-td">{String(v ?? "—")}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               );
             })()}
-
             <div style={{ marginTop: 12, textAlign: "right" }}>
-              <button
-                onClick={() => setDetailsUser(null)}
-                style={{ padding: "0.5rem 0.8rem" }}
-              >
+              <button className="sp-btn" onClick={() => setDetailsUser(null)}>
                 Close
               </button>
             </div>
