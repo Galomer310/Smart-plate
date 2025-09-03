@@ -1,0 +1,68 @@
+.sp-personal {
+  padding: 1rem;
+}
+.sp-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* Calendar layout */
+.sp-cal {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(38px, 1fr));
+  gap: 6px;
+}
+.sp-cal-day {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 6px;
+  text-align: center;
+  font-size: 0.85rem;
+  background: #fafafa;
+}
+.sp-cal-day small { display: block; opacity: 0.7; font-size: 0.7rem; }
+.sp-cal-marker-start { outline: 2px solid #4caf50; }
+.sp-cal-marker-enroll { outline: 2px dashed #2196f3; }
+.sp-cal-marker-end { outline: 2px solid #f44336; }
+.sp-cal-marker-today { background: #fffde7; }
+
+/* Header row */
+.sp-plan-header {
+  display: grid;
+  gap: 1rem;
+}
+@media (min-width: 860px) {
+  .sp-plan-header {
+    grid-template-columns: 320px 1fr;
+    align-items: start;
+  }
+}
+
+/* Badge */
+.sp-badge {
+  display: inline-block;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  font-weight: 600;
+  border: 1px solid #ddd;
+}
+
+/* Legend */
+.sp-legend {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.sp-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #e5e5e5; border-radius: 999px;
+  background: #fff;
+  font-size: 0.8rem;
+}
+.sp-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }

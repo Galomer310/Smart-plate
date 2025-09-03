@@ -1,10 +1,14 @@
+// frontend/src/components/PersonalArea.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
+import PlanHeader from "./personal/PlanHeader";
+import type { PlanInfo } from "./personal/types";
+import "./personal/personal.css";
 
 type Questionnaire = {
-  height: string; // store as string (e.g., "1.70")
-  weight: string; // store as string (e.g., "70")
-  age: string; // input as string, backend coerces to number (20-90)
+  height: string; // e.g. "1.70" (meters)
+  weight: string; // e.g. "70"   (kg)
+  age: string; // string in UI; backend zod coerces to number
 
   allergies: string;
   program_goal: string;
@@ -35,38 +39,33 @@ const PersonalArea: React.FC = () => {
   const [needsQuestionnaire, setNeedsQuestionnaire] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Build dropdown option arrays
-  // Height: 1.40 -> 2.10 in 0.01 m steps (≈ 71 options). Change STEP to 0.05/0.10 if you want fewer.
-  const HEIGHT_MIN = 1.4;
-  const HEIGHT_MAX = 2.1;
-  const HEIGHT_STEP = 0.01;
+  const [plan, setPlan] = useState<PlanInfo | null>(null);
 
+  // Dropdown options
+  // Height: 1.40–2.10 (meters). Using 0.01m steps for good granularity.
   const heightOptions = useMemo(() => {
     const arr: string[] = [];
-    for (
-      let h = Math.round(HEIGHT_MIN * 100);
-      h <= Math.round(HEIGHT_MAX * 100);
-      h += Math.round(HEIGHT_STEP * 100)
-    ) {
+    for (let h = 140; h <= 210; h += 1) {
       arr.push((h / 100).toFixed(2));
     }
     return arr;
   }, []);
 
-  // Weight: 45 -> 200 (step 1)
+  // Weight: 45–200 kg
   const weightOptions = useMemo(() => {
     const arr: string[] = [];
     for (let w = 45; w <= 200; w++) arr.push(String(w));
     return arr;
   }, []);
 
-  // Age: 20 -> 90 (step 1)
+  // Age: 20–90
   const ageOptions = useMemo(() => {
     const arr: string[] = [];
     for (let a = 20; a <= 90; a++) arr.push(String(a));
     return arr;
   }, []);
 
+  // Questionnaire form state
   const [form, setForm] = useState<Questionnaire>({
     height: "",
     weight: "",
@@ -94,14 +93,18 @@ const PersonalArea: React.FC = () => {
     sleep_hours: "",
   });
 
+  // Load questionnaire presence on first mount
   useEffect(() => {
     (async () => {
       try {
         const r = await api.get<QuestionnaireGet>("/api/user/questionnaire");
-        if (!r.data.exists) setNeedsQuestionnaire(true);
-      } catch (e: any) {
-        console.error("Failed to check questionnaire:", e);
-        // If check fails (likely auth), show the questionnaire to avoid blocking the user
+        if (!r.data.exists) {
+          setNeedsQuestionnaire(true);
+        } else {
+          setNeedsQuestionnaire(false);
+        }
+      } catch {
+        // If check fails (likely auth), show the questionnaire to avoid blocking
         setNeedsQuestionnaire(true);
       } finally {
         setLoading(false);
@@ -109,7 +112,24 @@ const PersonalArea: React.FC = () => {
     })();
   }, []);
 
-  const set =
+  // Load plan info (only if questionnaire is complete)
+  const loadPlan = async () => {
+    try {
+      const r = await api.get<PlanInfo>("/api/user/plan");
+      setPlan(r.data);
+    } catch (e) {
+      console.error("Failed to load plan:", e);
+      setPlan(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!needsQuestionnaire) {
+      loadPlan();
+    }
+  }, [needsQuestionnaire]);
+
+  const setField =
     (k: keyof Questionnaire) =>
     (
       e: React.ChangeEvent<
@@ -118,11 +138,10 @@ const PersonalArea: React.FC = () => {
     ) =>
       setForm((prev) => ({ ...prev, [k]: e.target.value }));
 
-  const submit = async (e: React.FormEvent) => {
+  const submitQuestionnaire = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
-    // basic client-side guardrails before hitting the server
     if (!form.height) return setErrorMsg("בחרי גובה מהרשימה.");
     if (!form.weight) return setErrorMsg("בחרי משקל מהרשימה.");
     if (!form.age) return setErrorMsg("בחרי גיל מהרשימה.");
@@ -130,11 +149,11 @@ const PersonalArea: React.FC = () => {
     try {
       await api.post("/api/user/questionnaire", {
         ...form,
-        // backend coerces age to number; we still send a string here and let zod coerce
+        // age stays string here; backend zod schema coerces to number (20–90)
       });
-
       alert("השאלון נשמר בהצלחה!");
       setNeedsQuestionnaire(false);
+      await loadPlan();
     } catch (e: any) {
       console.error("Failed to submit questionnaire:", e);
       const msg =
@@ -144,23 +163,34 @@ const PersonalArea: React.FC = () => {
     }
   };
 
-  if (loading) return <div style={{ padding: "1rem" }}>טוען...</div>;
+  const openMessages = () => {
+    // Route already exists in your app
+    window.location.href = "/messages";
+  };
+
+  if (loading) return <div className="sp-personal">טוען...</div>;
 
   if (needsQuestionnaire) {
     return (
-      <div style={{ padding: "1rem", direction: "rtl" }}>
+      <div className="sp-personal" style={{ direction: "rtl" }}>
         <h1>שאלון פתיחה</h1>
         {errorMsg && (
           <div style={{ color: "red", marginBottom: 12 }}>{errorMsg}</div>
         )}
+
         <form
-          onSubmit={submit}
+          onSubmit={submitQuestionnaire}
+          className="sp-card"
           style={{ display: "grid", gap: "0.75rem", maxWidth: 900 }}
         >
           {/* Height / Weight / Age dropdowns */}
           <label>
             גובה
-            <select value={form.height} onChange={set("height")}>
+            <select
+              className="sp-select"
+              value={form.height}
+              onChange={setField("height")}
+            >
               <option value="">בחרי...</option>
               {heightOptions.map((h) => (
                 <option key={h} value={h}>
@@ -172,7 +202,11 @@ const PersonalArea: React.FC = () => {
 
           <label>
             משקל
-            <select value={form.weight} onChange={set("weight")}>
+            <select
+              className="sp-select"
+              value={form.weight}
+              onChange={setField("weight")}
+            >
               <option value="">בחרי...</option>
               {weightOptions.map((w) => (
                 <option key={w} value={w}>
@@ -184,7 +218,11 @@ const PersonalArea: React.FC = () => {
 
           <label>
             גיל
-            <select value={form.age} onChange={set("age")}>
+            <select
+              className="sp-select"
+              value={form.age}
+              onChange={setField("age")}
+            >
               <option value="">בחרי...</option>
               {ageOptions.map((a) => (
                 <option key={a} value={a}>
@@ -194,102 +232,132 @@ const PersonalArea: React.FC = () => {
             </select>
           </label>
 
-          {/* The rest (free text / yes-no) */}
+          {/* Rest of fields */}
           <textarea
+            className="sp-textarea"
             placeholder="אלרגיות ו/או רגישויות"
             value={form.allergies}
-            onChange={set("allergies")}
+            onChange={setField("allergies")}
           />
           <textarea
+            className="sp-textarea"
             placeholder="מטרת התוכנית"
             value={form.program_goal}
-            onChange={set("program_goal")}
+            onChange={setField("program_goal")}
           />
           <textarea
+            className="sp-textarea"
             placeholder="מה תרצי לשפר בגופך"
             value={form.body_improvement}
-            onChange={set("body_improvement")}
+            onChange={setField("body_improvement")}
           />
           <textarea
+            className="sp-textarea"
             placeholder="האם יש לך בעיות רפואיות"
             value={form.medical_issues}
-            onChange={set("medical_issues")}
+            onChange={setField("medical_issues")}
           />
           <textarea
-            placeholder="האם את נוטלת תרופות אם כן צייני את שם התרופה וכמות יומית"
+            className="sp-textarea"
+            placeholder="האם נוטלת תרופות"
             value={form.takes_medications}
-            onChange={set("takes_medications")}
+            onChange={setField("takes_medications")}
           />
           <textarea
-            placeholder="האם את בהריון או אחרי לידה (עד חצי שנה)"
+            className="sp-textarea"
+            placeholder="האם בהריון או אחרי לידה (עד חצי שנה)"
             value={form.pregnant_or_postpartum}
-            onChange={set("pregnant_or_postpartum")}
+            onChange={setField("pregnant_or_postpartum")}
           />
           <textarea
-            placeholder="האם יש לך תסמינים של גיל המעבר אם כן צייני"
+            className="sp-textarea"
+            placeholder="האם יש תסמינים של גיל המעבר"
             value={form.menopause_symptoms}
-            onChange={set("menopause_symptoms")}
+            onChange={setField("menopause_symptoms")}
           />
           <input
+            className="sp-input"
             placeholder="האם את אוכלת ארוחת בוקר באופן קבוע"
             value={form.breakfast_regular}
-            onChange={set("breakfast_regular")}
+            onChange={setField("breakfast_regular")}
           />
           <input
-            placeholder="האם את סובלת מ- עצירויות / נפיחות בטנית / בעיות בעיכול"
+            className="sp-input"
+            placeholder="עצירויות/נפיחות/בעיות עיכול"
             value={form.digestion_issues}
-            onChange={set("digestion_issues")}
+            onChange={setField("digestion_issues")}
           />
           <input
-            placeholder="האם את מנשנשת בין הארוחות "
+            className="sp-input"
+            placeholder="נשנוש בין ארוחות"
             value={form.snacking_between_meals}
-            onChange={set("snacking_between_meals")}
+            onChange={setField("snacking_between_meals")}
           />
           <input
-            placeholder="האם את אוכלת באופן מסודר בדרך כלל במהלך היום? בוקר / צהרים / ערב"
+            className="sp-input"
+            placeholder="אכילה מסודרת במהלך היום"
             value={form.organized_eating}
-            onChange={set("organized_eating")}
+            onChange={setField("organized_eating")}
           />
           <textarea
-            placeholder="האם את נמנעת מאכילת קבוצות מזון כלשהן פחמימות/חלבונים/שומנים/אחר"
+            className="sp-textarea"
+            placeholder="הימנעות מקבוצות מזון (פחמימות/שומן/חלב)"
             value={form.avoid_food_groups}
-            onChange={set("avoid_food_groups")}
+            onChange={setField("avoid_food_groups")}
           />
           <input
-            placeholder="צייני מהי כמות המים שאת שותה ביום בכוסות או בליטרים "
+            className="sp-input"
+            placeholder="כמות מים ביום (ליטר)"
             value={form.water_intake}
-            onChange={set("water_intake")}
+            onChange={setField("water_intake")}
           />
           <input
-            placeholder="האם את צמחונית / טבעונית / קרניבורית / אחר "
+            className="sp-input"
+            placeholder="צמחונית / טבעונית / קרניבורית"
             value={form.diet_type}
-            onChange={set("diet_type")}
+            onChange={setField("diet_type")}
           />
           <input
-            placeholder="האם את מתאמנת באופן קבוע ? אם כן צייני את סוג הפעילות "
+            className="sp-input"
+            placeholder="פעילות גופנית סדירה?"
             value={form.regular_activity}
-            onChange={set("regular_activity")}
+            onChange={setField("regular_activity")}
           />
-
           <input
+            className="sp-input"
+            placeholder="מתאמנת לבד או בחדר כושר?"
+            value={form.training_place}
+            onChange={setField("training_place")}
+          />
+          <input
+            className="sp-input"
             placeholder="כמה פעמים בשבוע את מתאמנת"
             value={form.training_frequency}
-            onChange={set("training_frequency")}
-          />
-          <textarea
-            placeholder="צייני בבקשה מהי התחושה הכללית שלך כלפי גופך כיום "
-            value={form.body_feeling}
-            onChange={set("body_feeling")}
+            onChange={setField("training_frequency")}
           />
           <input
+            className="sp-input"
+            placeholder="סוג הפעילות שאת נוהגת לעשות"
+            value={form.activity_type}
+            onChange={setField("activity_type")}
+          />
+          <textarea
+            className="sp-textarea"
+            placeholder="התחושה הכללית שלך כלפי גופך כיום"
+            value={form.body_feeling}
+            onChange={setField("body_feeling")}
+          />
+          <input
+            className="sp-input"
             placeholder="כמה שעות רצופות בלילה את ישנה"
             value={form.sleep_hours}
-            onChange={set("sleep_hours")}
+            onChange={setField("sleep_hours")}
           />
 
           <button
             type="submit"
-            style={{ padding: "0.6rem", cursor: "pointer" }}
+            className="sp-badge"
+            style={{ alignSelf: "start" }}
           >
             שליחה
           </button>
@@ -298,11 +366,16 @@ const PersonalArea: React.FC = () => {
     );
   }
 
-  // Regular personal area after first submission
+  // Questionnaire already submitted → show plan header
   return (
-    <div style={{ padding: "1rem" }}>
-      <h1>אזור אישי</h1>
-      <p>ברוכה הבאה! השאלון הושלם. כאן יוצגו התוכנית/הודעות וכו'.</p>
+    <div className="sp-personal">
+      <PlanHeader plan={plan} onOpenMessages={openMessages} />
+
+      {/* Placeholder for future sections of the personal area */}
+      <div className="sp-card">
+        <h3 style={{ marginTop: 0 }}>התוכנית האישית</h3>
+        <p>כאן נציג בהמשך פרטי תוכנית, יומן אימונים/תזונה, קבצים ועוד.</p>
+      </div>
     </div>
   );
 };
