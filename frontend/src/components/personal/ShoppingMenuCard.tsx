@@ -1,16 +1,17 @@
 import React, { useState } from "react";
 import "./personal.css";
+import {
+  CATEGORY_LABELS,
+  SHOPPING_OPTIONS,
+  type CategoryKey,
+} from "./foodData";
 
 /**
- * A right-column card that toggles between:
- *  - Shopping List
- *  - Menu (Breakfast / Lunch / Dinner)
- *
- * Structure only (no real ingredients yet) so you can fill later.
+ * Toggle between Shopping List and Menu (Breakfast/Lunch/Dinner).
+ * Shopping list shows the same categories used by the plate planner.
  */
 const ShoppingMenuCard: React.FC = () => {
   const [view, setView] = useState<"list" | "menu">("list");
-
   const toggleView = () => setView((v) => (v === "list" ? "menu" : "list"));
 
   return (
@@ -25,19 +26,19 @@ const ShoppingMenuCard: React.FC = () => {
       </div>
 
       {view === "list" ? (
-        <div>
-          {/* Placeholder list; add real items later */}
-          <ul style={{ margin: 0, paddingLeft: "1.2rem", lineHeight: 1.6 }}>
-            <li style={{ opacity: 0.6 }}>
-              <em>Item 1 (placeholder)</em>
-            </li>
-            <li style={{ opacity: 0.6 }}>
-              <em>Item 2 (placeholder)</em>
-            </li>
-            <li style={{ opacity: 0.6 }}>
-              <em>Item 3 (placeholder)</em>
-            </li>
-          </ul>
+        <div style={{ display: "grid", gap: "0.75rem" }}>
+          {(Object.keys(SHOPPING_OPTIONS) as CategoryKey[]).map((cat) => (
+            <section key={cat} className="sp-section">
+              <h4 className="sp-section-title">{CATEGORY_LABELS[cat]}</h4>
+              <ul className="sp-list">
+                {SHOPPING_OPTIONS[cat].map((it) => (
+                  <li key={it} style={{ opacity: 0.8 }}>
+                    {it}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
         </div>
       ) : (
         <div style={{ display: "grid", gap: "0.75rem" }}>

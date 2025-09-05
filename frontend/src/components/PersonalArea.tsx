@@ -1,16 +1,16 @@
 // frontend/src/components/PersonalArea.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import api from "../api";
 import PlanHeader from "./personal/PlanHeader";
+import PlatePlanner from "./personal/PlatePlanner";
 import ShoppingMenuCard from "./personal/ShoppingMenuCard";
 import type { PlanInfo } from "./personal/types";
 import "./personal/personal.css";
 
 type Questionnaire = {
-  height: string;
-  weight: string;
-  age: string;
+  height: string; // meters, e.g. "1.70"
+  weight: string; // kg, e.g. "70"
+  age: string; // string in UI; backend zod coerces to number
 
   allergies: string;
   program_goal: string;
@@ -37,8 +37,6 @@ type Questionnaire = {
 type QuestionnaireGet = { exists: boolean; data?: Partial<Questionnaire> };
 
 const PersonalArea: React.FC = () => {
-  const navigate = useNavigate();
-
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [needsQuestionnaire, setNeedsQuestionnaire] = useState(false);
@@ -102,10 +100,12 @@ const PersonalArea: React.FC = () => {
     setLoading(true);
     setLoadError(null);
     try {
+      // 1) Does questionnaire exist?
       const r = await api.get<QuestionnaireGet>("/api/user/questionnaire");
       const exists = r.data.exists === true;
       setNeedsQuestionnaire(!exists);
 
+      // 2) If exists, load plan header info
       if (exists) {
         try {
           const planRes = await api.get<PlanInfo>("/api/user/plan");
@@ -118,7 +118,7 @@ const PersonalArea: React.FC = () => {
         setPlan(null);
       }
     } catch (e: any) {
-      // Do not redirect here; the interceptor will refresh/redirect if needed.
+      // Do NOT redirect here; api.ts handles refresh / redirects.
       setLoadError(
         e?.response?.data?.error ||
           e?.message ||
@@ -144,7 +144,7 @@ const PersonalArea: React.FC = () => {
 
     try {
       await api.post("/api/user/questionnaire", { ...form });
-      // Re-check on server to confirm it now exists
+      // Re-check after submit to confirm existence, then show plan
       await loadStatus();
       alert("השאלון נשמר בהצלחה!");
     } catch (e: any) {
@@ -174,7 +174,7 @@ const PersonalArea: React.FC = () => {
   if (needsQuestionnaire) {
     return (
       <div className="sp-personal" style={{ direction: "rtl" }}>
-        <h1>शאלון פתיחה</h1>
+        <h1>שאלון פתיחה</h1>
         {errorMsg && (
           <div style={{ color: "red", marginBottom: 12 }}>{errorMsg}</div>
         )}
@@ -367,7 +367,7 @@ const PersonalArea: React.FC = () => {
     );
   }
 
-  // Questionnaire already submitted → show plan header and the two-column area
+  // Questionnaire already submitted → show plan header + left/right area
   return (
     <div className="sp-personal">
       <PlanHeader
@@ -375,13 +375,9 @@ const PersonalArea: React.FC = () => {
         onOpenMessages={() => (window.location.href = "/messages")}
       />
 
-      {/* Two-column area: left content, right shopping/menu card */}
+      {/* Two-column area: left = PlatePlanner, right = Shopping/Menu card */}
       <div className="sp-main-grid">
-        <div className="sp-card">
-          <h3 style={{ marginTop: 0 }}>התוכנית האישית</h3>
-          <p>כאן נציג בהמשך פרטי תוכנית, יומן אימונים/תזונה, קבצים ועוד.</p>
-        </div>
-
+        <PlatePlanner />
         <ShoppingMenuCard />
       </div>
     </div>

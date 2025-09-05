@@ -91,3 +91,115 @@
 .sp-section {}
 .sp-section-title { margin: 0 0 6px 0; }
 .sp-list { margin: 0; padding-left: 1.2rem; line-height: 1.6; }
+
+
+/* ---------- Plate Planner ---------- */
+.sp-plate-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin-bottom: 1rem;
+}
+
+/* The plate circle (50/20/15/15 via conic gradient) */
+.sp-plate {
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 4px solid #e9e9e9;
+  background:
+    conic-gradient(
+      /* 50% fiber */ #cfe9cf 0 180deg,
+      /* 20% protein */ #d6e8ff 180deg 252deg,
+      /* 15% fat */ #ffe3c4 252deg 306deg,
+      /* 15% carbs */ #f2e0ff 306deg 360deg
+    );
+}
+
+/* Hotspots: where the label + Add button sit */
+.sp-plate-hotspot {
+  position: absolute;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  background: rgba(255,255,255,0.9);
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+  padding: 4px 8px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  pointer-events: auto;
+}
+
+.sp-plate-title { font-size: 0.8rem; font-weight: 600; }
+
+/* Approximate placement */
+.sp-hot-fiber   { top: 8%;  left: 50%; transform: translateX(-50%); }
+.sp-hot-protein { top: 38%; right: 6%;  }
+.sp-hot-fat     { bottom: 18%; right: 10%; }
+.sp-hot-carbs   { bottom: 14%; left: 10%;  }
+
+@media (max-width: 520px) {
+  .sp-plate { max-width: 340px; }
+  .sp-hot-protein { right: 2%; }
+  .sp-hot-fat { right: 4%; bottom: 16%; }
+  .sp-hot-carbs { left: 4%; }
+}
+
+/* Dropdown popover */
+.sp-dropdown {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(92%, 420px);
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 10px 32px rgba(0,0,0,0.12);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+}
+.sp-dropdown-header {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+}
+.sp-dropdown-body {
+  padding: 8px 12px;
+  overflow: auto;
+  display: grid;
+  gap: 6px;
+}
+.sp-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sp-dropdown-footer {
+  padding: 10px 12px;
+  border-top: 1px solid #eee;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* Summary under plate */
+.sp-plate-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 860px) {
+  .sp-plate-summary { grid-template-columns: 1fr; }
+}
+.sp-plate-summary-col {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fafafa;
+}
+.sp-plate-summary-title { font-weight: 700; margin-bottom: 6px; }
+.sp-plate-summary-empty { opacity: 0.7; font-style: italic; }
+.sp-plate-summary-list { margin: 0; padding-left: 1.2rem; line-height: 1.6; }
