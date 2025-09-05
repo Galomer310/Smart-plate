@@ -1,14 +1,15 @@
 // frontend/src/components/PersonalArea.tsx
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../api";
 import PlanHeader from "./personal/PlanHeader";
 import type { PlanInfo } from "./personal/types";
 import "./personal/personal.css";
 
 type Questionnaire = {
-  height: string; // e.g. "1.70" (meters)
-  weight: string; // e.g. "70"   (kg)
-  age: string; // string in UI; backend zod coerces to number
+  height: string;
+  weight: string;
+  age: string;
 
   allergies: string;
   program_goal: string;
@@ -35,30 +36,25 @@ type Questionnaire = {
 type QuestionnaireGet = { exists: boolean; data?: Partial<Questionnaire> };
 
 const PersonalArea: React.FC = () => {
+  const navigate = useNavigate();
+
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [needsQuestionnaire, setNeedsQuestionnaire] = useState(false);
+  const [plan, setPlan] = useState<PlanInfo | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [plan, setPlan] = useState<PlanInfo | null>(null);
-
   // Dropdown options
-  // Height: 1.40–2.10 (meters). Using 0.01m steps for good granularity.
   const heightOptions = useMemo(() => {
     const arr: string[] = [];
-    for (let h = 140; h <= 210; h += 1) {
-      arr.push((h / 100).toFixed(2));
-    }
+    for (let h = 140; h <= 210; h++) arr.push((h / 100).toFixed(2));
     return arr;
   }, []);
-
-  // Weight: 45–200 kg
   const weightOptions = useMemo(() => {
     const arr: string[] = [];
     for (let w = 45; w <= 200; w++) arr.push(String(w));
     return arr;
   }, []);
-
-  // Age: 20–90
   const ageOptions = useMemo(() => {
     const arr: string[] = [];
     for (let a = 20; a <= 90; a++) arr.push(String(a));
@@ -70,7 +66,6 @@ const PersonalArea: React.FC = () => {
     height: "",
     weight: "",
     age: "",
-
     allergies: "",
     program_goal: "",
     body_improvement: "",
@@ -93,42 +88,6 @@ const PersonalArea: React.FC = () => {
     sleep_hours: "",
   });
 
-  // Load questionnaire presence on first mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await api.get<QuestionnaireGet>("/api/user/questionnaire");
-        if (!r.data.exists) {
-          setNeedsQuestionnaire(true);
-        } else {
-          setNeedsQuestionnaire(false);
-        }
-      } catch {
-        // If check fails (likely auth), show the questionnaire to avoid blocking
-        setNeedsQuestionnaire(true);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  // Load plan info (only if questionnaire is complete)
-  const loadPlan = async () => {
-    try {
-      const r = await api.get<PlanInfo>("/api/user/plan");
-      setPlan(r.data);
-    } catch (e) {
-      console.error("Failed to load plan:", e);
-      setPlan(null);
-    }
-  };
-
-  useEffect(() => {
-    if (!needsQuestionnaire) {
-      loadPlan();
-    }
-  }, [needsQuestionnaire]);
-
   const setField =
     (k: keyof Questionnaire) =>
     (
@@ -137,6 +96,48 @@ const PersonalArea: React.FC = () => {
       >
     ) =>
       setForm((prev) => ({ ...prev, [k]: e.target.value }));
+
+  const loadStatus = async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const r = await api.get<QuestionnaireGet>("/api/user/questionnaire");
+      const exists = r.data.exists === true;
+      setNeedsQuestionnaire(!exists);
+
+      if (exists) {
+        try {
+          const planRes = await api.get<PlanInfo>("/api/user/plan");
+          setPlan(planRes.data);
+        } catch (e) {
+          console.error("Failed to load plan:", e);
+          setPlan(null);
+        }
+      } else {
+        setPlan(null);
+      }
+    } catch (e: any) {
+      const status = e?.response?.status;
+      if (status === 401 || status === 403) {
+        // Not authenticated → go to login; do NOT show the questionnaire
+        navigate("/login");
+        return;
+      }
+      // Network/other error → show retry UI; do NOT show the questionnaire
+      setLoadError(
+        e?.response?.data?.error ||
+          e?.message ||
+          "Failed to check questionnaire status"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const submitQuestionnaire = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,13 +148,10 @@ const PersonalArea: React.FC = () => {
     if (!form.age) return setErrorMsg("בחרי גיל מהרשימה.");
 
     try {
-      await api.post("/api/user/questionnaire", {
-        ...form,
-        // age stays string here; backend zod schema coerces to number (20–90)
-      });
+      await api.post("/api/user/questionnaire", { ...form });
+      // Re-check on server to confirm it now exists
+      await loadStatus();
       alert("השאלון נשמר בהצלחה!");
-      setNeedsQuestionnaire(false);
-      await loadPlan();
     } catch (e: any) {
       console.error("Failed to submit questionnaire:", e);
       const msg =
@@ -163,12 +161,20 @@ const PersonalArea: React.FC = () => {
     }
   };
 
-  const openMessages = () => {
-    // Route already exists in your app
-    window.location.href = "/messages";
-  };
-
   if (loading) return <div className="sp-personal">טוען...</div>;
+
+  if (loadError) {
+    return (
+      <div className="sp-personal">
+        <div className="sp-card" style={{ color: "#b00020" }}>
+          {loadError}
+        </div>
+        <button className="sp-badge" onClick={loadStatus}>
+          נסה שוב
+        </button>
+      </div>
+    );
+  }
 
   if (needsQuestionnaire) {
     return (
@@ -369,9 +375,11 @@ const PersonalArea: React.FC = () => {
   // Questionnaire already submitted → show plan header
   return (
     <div className="sp-personal">
-      <PlanHeader plan={plan} onOpenMessages={openMessages} />
+      <PlanHeader
+        plan={plan}
+        onOpenMessages={() => (window.location.href = "/messages")}
+      />
 
-      {/* Placeholder for future sections of the personal area */}
       <div className="sp-card">
         <h3 style={{ marginTop: 0 }}>התוכנית האישית</h3>
         <p>כאן נציג בהמשך פרטי תוכנית, יומן אימונים/תזונה, קבצים ועוד.</p>

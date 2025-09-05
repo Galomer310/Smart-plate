@@ -1,97 +1,102 @@
+// frontend/src/api.ts
 import axios from "axios";
 
-// Shape of /api/auth/refresh response
-type RefreshResponse = { accessToken: string };
-
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? "http://localhost:5000",
-  withCredentials: true, // allow refresh cookie
+  baseURL: "http://localhost:5000",
+  withCredentials: true, // send refresh cookie
 });
 
-// Attach the (admin/user) access token to every request
-api.interceptors.request.use((config) => {
-  const token =
-    localStorage.getItem("adminToken") || localStorage.getItem("accessToken");
-
+// Attach Authorization header from localStorage (user or admin)
+api.interceptors.request.use((config: any) => {
+  const userToken = localStorage.getItem("accessToken");
+  const adminToken = localStorage.getItem("adminToken");
+  const token = userToken || adminToken;
   if (token) {
-    // Axios v1 headers is an AxiosHeaders object with .set(); older Axios uses a plain object.
-    const headers = (config.headers ?? {}) as Record<string, any> & {
-      set?: (k: string, v: string) => void;
-    };
-
-    if (typeof headers.set === "function") {
-      headers.set("Authorization", `Bearer ${token}`);
-    } else {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-    config.headers = headers as any;
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
   }
-
   return config;
 });
 
+// --- Refresh coordination ---
 let isRefreshing = false;
-let waiters: Array<(t: string) => void> = [];
+let queue: Array<(token: string | null) => void> = [];
 
-// Refresh on 401 and retry once
+function flushQueue(token: string | null) {
+  queue.forEach((cb) => cb(token));
+  queue = [];
+}
+
+function hardLogout() {
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("adminToken");
+  window.location.href = "/login";
+}
+
 api.interceptors.response.use(
-  (res) => res,
-  async (error) => {
-    const original: any = error?.config;
-    const status = error?.response?.status;
+  (r) => r,
+  async (error: any) => {
+    const { response, config } = error || {};
+    if (!response) return Promise.reject(error);
 
-    if (status === 401 && !original?._retry) {
-      original._retry = true;
+    const isRefreshCall =
+      typeof config?.url === "string" &&
+      config.url.endsWith("/api/auth/refresh");
+
+    // Only try refresh for 401 (Unauthorized), once per request
+    if (response.status === 401 && !config?._retry && !isRefreshCall) {
+      if (isRefreshing) {
+        // Queue while a refresh is in-flight
+        return new Promise((resolve, reject) => {
+          queue.push((token) => {
+            if (!token) return reject(error);
+            const newConfig: any = { ...config };
+            newConfig.headers = newConfig.headers || {};
+            newConfig.headers.Authorization = `Bearer ${token}`;
+            resolve(api(newConfig));
+          });
+        });
+      }
+
+      (config as any)._retry = true;
+      isRefreshing = true;
 
       try {
-        const newToken = await refreshAccessToken();
+        // 🔒 Type the refresh response so r.data.token is valid
+        const r = await api.post<{ token: string }>("/api/auth/refresh");
+        const newToken = r.data.token;
 
-        // Put the new token on the retried request
-        const headers = (original.headers ?? {}) as Record<string, any> & {
-          set?: (k: string, v: string) => void;
-        };
-        if (typeof headers.set === "function") {
-          headers.set("Authorization", `Bearer ${newToken}`);
+        // Store under whichever key is in use (prefer admin if present)
+        if (localStorage.getItem("adminToken")) {
+          localStorage.setItem("adminToken", newToken);
         } else {
-          headers["Authorization"] = `Bearer ${newToken}`;
+          localStorage.setItem("accessToken", newToken);
         }
-        original.headers = headers as any;
 
-        return api(original);
-      } catch {
-        localStorage.removeItem("adminToken");
-        localStorage.removeItem("accessToken");
+        flushQueue(newToken);
+        isRefreshing = false;
+
+        // Retry original request with new token
+        const newConfig: any = { ...config };
+        newConfig.headers = newConfig.headers || {};
+        newConfig.headers.Authorization = `Bearer ${newToken}`;
+        return api(newConfig);
+      } catch (e: any) {
+        // Refresh failed: could be 401 (bad RT) or 403 (plan expired)
+        flushQueue(null);
+        isRefreshing = false;
+        hardLogout();
+        return Promise.reject(e);
       }
+    }
+
+    // If /refresh returns 401/403 (invalid/expired RT or plan expired) ⇒ logout
+    if (isRefreshCall && (response.status === 401 || response.status === 403)) {
+      hardLogout();
     }
 
     return Promise.reject(error);
   }
 );
-
-async function refreshAccessToken(): Promise<string> {
-  // de-duplicate parallel 401s
-  if (isRefreshing) {
-    return new Promise<string>((resolve) => waiters.push(resolve));
-  }
-
-  isRefreshing = true;
-  try {
-    // Tell TS what we expect back
-    const r = await api.post<RefreshResponse>("/api/auth/refresh");
-    const newToken = r.data.accessToken;
-
-    // keep both keys in sync (admin area reads adminToken)
-    localStorage.setItem("adminToken", newToken);
-    localStorage.setItem("accessToken", newToken);
-
-    // release queued requests
-    waiters.forEach((fn) => fn(newToken));
-    waiters = [];
-
-    return newToken;
-  } finally {
-    isRefreshing = false;
-  }
-}
 
 export default api;
