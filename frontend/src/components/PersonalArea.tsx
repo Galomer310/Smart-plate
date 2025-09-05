@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
 import PlanHeader from "./personal/PlanHeader";
+import ShoppingMenuCard from "./personal/ShoppingMenuCard";
 import type { PlanInfo } from "./personal/types";
 import "./personal/personal.css";
 
@@ -117,13 +118,7 @@ const PersonalArea: React.FC = () => {
         setPlan(null);
       }
     } catch (e: any) {
-      const status = e?.response?.status;
-      if (status === 401 || status === 403) {
-        // Not authenticated → go to login; do NOT show the questionnaire
-        navigate("/login");
-        return;
-      }
-      // Network/other error → show retry UI; do NOT show the questionnaire
+      // Do not redirect here; the interceptor will refresh/redirect if needed.
       setLoadError(
         e?.response?.data?.error ||
           e?.message ||
@@ -179,7 +174,7 @@ const PersonalArea: React.FC = () => {
   if (needsQuestionnaire) {
     return (
       <div className="sp-personal" style={{ direction: "rtl" }}>
-        <h1>שאלון פתיחה</h1>
+        <h1>शאלון פתיחה</h1>
         {errorMsg && (
           <div style={{ color: "red", marginBottom: 12 }}>{errorMsg}</div>
         )}
@@ -372,7 +367,7 @@ const PersonalArea: React.FC = () => {
     );
   }
 
-  // Questionnaire already submitted → show plan header
+  // Questionnaire already submitted → show plan header and the two-column area
   return (
     <div className="sp-personal">
       <PlanHeader
@@ -380,9 +375,14 @@ const PersonalArea: React.FC = () => {
         onOpenMessages={() => (window.location.href = "/messages")}
       />
 
-      <div className="sp-card">
-        <h3 style={{ marginTop: 0 }}>התוכנית האישית</h3>
-        <p>כאן נציג בהמשך פרטי תוכנית, יומן אימונים/תזונה, קבצים ועוד.</p>
+      {/* Two-column area: left content, right shopping/menu card */}
+      <div className="sp-main-grid">
+        <div className="sp-card">
+          <h3 style={{ marginTop: 0 }}>התוכנית האישית</h3>
+          <p>כאן נציג בהמשך פרטי תוכנית, יומן אימונים/תזונה, קבצים ועוד.</p>
+        </div>
+
+        <ShoppingMenuCard />
       </div>
     </div>
   );

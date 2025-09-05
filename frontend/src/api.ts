@@ -3,14 +3,42 @@ import axios from "axios";
 
 const api = axios.create({
   baseURL: "http://localhost:5000",
-  withCredentials: true, // send refresh cookie
+  withCredentials: true, // send refresh cookie (USERS only)
 });
 
-// Attach Authorization header from localStorage (user or admin)
+const ADMIN_PREFIX = "/api/admin";
+
+function isAdminUrl(url?: string): boolean {
+  if (!url) return false;
+  // Be robust whether axios passes relative or absolute
+  try {
+    const u = new URL(url, api.defaults.baseURL || "http://localhost:5000");
+    return u.pathname.startsWith(ADMIN_PREFIX);
+  } catch {
+    return url.includes(ADMIN_PREFIX);
+  }
+}
+
+function hardUserLogout() {
+  localStorage.removeItem("accessToken");
+  // keep adminToken intact
+  window.location.href = "/login";
+}
+
+function hardAdminLogout() {
+  localStorage.removeItem("adminToken");
+  // keep user token intact
+  window.location.href = "/admin/login";
+}
+
+// Attach the correct token: adminToken for /api/admin/*, otherwise prefer user token
 api.interceptors.request.use((config: any) => {
   const userToken = localStorage.getItem("accessToken");
   const adminToken = localStorage.getItem("adminToken");
-  const token = userToken || adminToken;
+  const url = String(config?.url || "");
+  const targetIsAdmin = isAdminUrl(url);
+
+  const token = targetIsAdmin ? adminToken : (userToken || adminToken);
   if (token) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
@@ -18,7 +46,7 @@ api.interceptors.request.use((config: any) => {
   return config;
 });
 
-// --- Refresh coordination ---
+// ----- USER refresh coordination (admin does NOT refresh) -----
 let isRefreshing = false;
 let queue: Array<(token: string | null) => void> = [];
 
@@ -27,30 +55,30 @@ function flushQueue(token: string | null) {
   queue = [];
 }
 
-function hardLogout() {
-  localStorage.removeItem("accessToken");
-  localStorage.removeItem("adminToken");
-  window.location.href = "/login";
-}
-
 api.interceptors.response.use(
   (r) => r,
   async (error: any) => {
     const { response, config } = error || {};
     if (!response) return Promise.reject(error);
 
-    const isRefreshCall =
-      typeof config?.url === "string" &&
-      config.url.endsWith("/api/auth/refresh");
+    const url = String(config?.url || "");
+    const adminCall = isAdminUrl(url);
+    const isRefreshCall = url.endsWith("/api/auth/refresh");
 
-    // Only try refresh for 401 (Unauthorized), once per request
+    // Admin calls: never try refresh; force admin re-login on 401/403
+    if ((response.status === 401 || response.status === 403) && adminCall) {
+      hardAdminLogout();
+      return Promise.reject(error);
+    }
+
+    // Users: try one refresh on 401 (non-refresh call)
     if (response.status === 401 && !config?._retry && !isRefreshCall) {
       if (isRefreshing) {
-        // Queue while a refresh is in-flight
+        // Queue while a refresh is in flight
         return new Promise((resolve, reject) => {
           queue.push((token) => {
             if (!token) return reject(error);
-            const newConfig: any = { ...config };
+            const newConfig: any = { ...config, _retry: true };
             newConfig.headers = newConfig.headers || {};
             newConfig.headers.Authorization = `Bearer ${token}`;
             resolve(api(newConfig));
@@ -62,16 +90,12 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        // 🔒 Type the refresh response so r.data.token is valid
+        // 🔒 Typed so r.data.token exists
         const r = await api.post<{ token: string }>("/api/auth/refresh");
         const newToken = r.data.token;
 
-        // Store under whichever key is in use (prefer admin if present)
-        if (localStorage.getItem("adminToken")) {
-          localStorage.setItem("adminToken", newToken);
-        } else {
-          localStorage.setItem("accessToken", newToken);
-        }
+        // Store as user token (refresh flow is user-only)
+        localStorage.setItem("accessToken", newToken);
 
         flushQueue(newToken);
         isRefreshing = false;
@@ -81,18 +105,18 @@ api.interceptors.response.use(
         newConfig.headers = newConfig.headers || {};
         newConfig.headers.Authorization = `Bearer ${newToken}`;
         return api(newConfig);
-      } catch (e: any) {
-        // Refresh failed: could be 401 (bad RT) or 403 (plan expired)
+      } catch (e) {
         flushQueue(null);
         isRefreshing = false;
-        hardLogout();
+        // Refresh failed: invalid RT or plan expired → logout user
+        hardUserLogout();
         return Promise.reject(e);
       }
     }
 
-    // If /refresh returns 401/403 (invalid/expired RT or plan expired) ⇒ logout
+    // If /refresh itself returns 401/403 → logout user (👈 fixed extra ')')
     if (isRefreshCall && (response.status === 401 || response.status === 403)) {
-      hardLogout();
+      hardUserLogout();
     }
 
     return Promise.reject(error);

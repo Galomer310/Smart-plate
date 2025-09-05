@@ -66,3 +66,28 @@
   font-size: 0.8rem;
 }
 .sp-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* Two-column content area below the plan header */
+.sp-main-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px; /* left content, right card */
+  gap: 1rem;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .sp-main-grid { grid-template-columns: 1fr; }
+}
+
+/* Card header (title + toggle button) */
+.sp-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* Section styling inside the menu view */
+.sp-section {}
+.sp-section-title { margin: 0 0 6px 0; }
+.sp-list { margin: 0; padding-left: 1.2rem; line-height: 1.6; }
