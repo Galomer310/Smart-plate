@@ -148,9 +148,6 @@ const Navbar: React.FC = () => {
         ) : (
           <>
             <li>
-              <Link to="/register">Register</Link>
-            </li>
-            <li>
               <Link to="/login">Login</Link>
             </li>
           </>

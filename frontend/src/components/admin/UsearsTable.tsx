@@ -7,9 +7,15 @@ type Props = {
   onDelete: (id: string, email: string) => void;
   onPlanUpdate: (id: string, currentPlan: string | null) => void; // kept for future, not rendered
   onMessage: (id: string) => void;
+  unreadMap?: Record<string, number>; // <-- NEW: map userId -> unread count
 };
 
-const UsersTable: React.FC<Props> = ({ users, onDelete, onMessage }) => {
+const UsersTable: React.FC<Props> = ({
+  users,
+  onDelete,
+  onMessage,
+  unreadMap,
+}) => {
   const [detailsUser, setDetailsUser] = useState<User | null>(null);
 
   return (
@@ -32,6 +38,8 @@ const UsersTable: React.FC<Props> = ({ users, onDelete, onMessage }) => {
               const goalToShow = u.program_goal ?? "—";
               const { bmi, label, color } = computeBMI(u);
               const bmiDisplay = bmi === null ? "—" : `${bmi} (${label})`;
+
+              const hasUnread = !!unreadMap && unreadMap[u.id] > 0;
 
               return (
                 <tr key={u.id}>
@@ -56,6 +64,17 @@ const UsersTable: React.FC<Props> = ({ users, onDelete, onMessage }) => {
                       <button
                         className="sp-btn"
                         onClick={() => onMessage(u.id)}
+                        // Red background when there are unread messages from this user
+                        style={
+                          hasUnread
+                            ? {
+                                background: "#ffeaea",
+                                color: "#b00020",
+                                borderColor: "#f4b1b4",
+                              }
+                            : undefined
+                        }
+                        title={hasUnread ? "Unread messages" : "Message"}
                       >
                         Message
                       </button>
