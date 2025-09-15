@@ -1,7 +1,12 @@
+import "dotenv/config";
 import { Pool } from "pg";
-import { DATABASE_URL } from "./env";
+
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error("DATABASE_URL is not set");
+}
 
 export const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: { rejectUnauthorized: false }, // Neon requires SSL
+  connectionString,
+  ssl: { rejectUnauthorized: false },
 });

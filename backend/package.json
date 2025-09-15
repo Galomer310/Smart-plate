@@ -1,18 +1,19 @@
 {
   "name": "smart-plate-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "dist/src/server.js",
+  "description": "Smart-Plate API",
   "license": "ISC",
   "type": "commonjs",
+  "main": "dist/src/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc -p .",
     "start": "node dist/src/server.js",
-    "seed": "ts-node-dev src/seed_admin.ts"
+    "db:bootstrap": "ts-node src/scripts/bootstrap.ts",
+    "seed:admin": "ts-node src/seed_admin.ts",
+    "seed": "npm run seed:admin"
   },
   "dependencies": {
-    "@types/cookie-parser": "^1.4.9",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -24,11 +25,13 @@
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
+    "@types/cookie-parser": "^1.4.9",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.3.0",
     "@types/pg": "^8.15.5",
+    "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.2"
   }

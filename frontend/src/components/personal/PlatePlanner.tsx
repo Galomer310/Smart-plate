@@ -1,139 +1,388 @@
-import React, { useState } from "react";
-import "./personal.css";
-import {
-  CATEGORY_LABELS,
-  SHOPPING_OPTIONS,
-  type CategoryKey,
-} from "./foodData";
+import React, { useMemo, useState, useEffect } from "react";
+import api from "../../api";
+import RoundPlate from "./RoundPlate";
 
-/**
- * PlatePlanner
- * - Visual plate with conic segments (50/20/15/15)
- * - Each segment has an "Add" button → opens a dropdown with checkboxes
- * - Selected items are shown under the plate per category
- */
-const PlatePlanner: React.FC = () => {
-  const [openFor, setOpenFor] = useState<CategoryKey | null>(null);
-  const [selected, setSelected] = useState<Record<CategoryKey, Set<string>>>({
-    fiber: new Set(),
-    protein: new Set(),
-    fat: new Set(),
-    carbs: new Set(),
-  });
+export type CarbsGroups = {
+  greens: string[]; // עלים ירוקים
+  greenVeg: string[]; // ירקות ירוקים
+  redVeg: string[]; // ירקות אדומים
+  fruitsBonus: string[]; // פירות + בונוס
+};
 
-  const toggleOpen = (cat: CategoryKey) => {
-    setOpenFor((curr) => (curr === cat ? null : cat));
+export type MealSelections = {
+  carbs: CarbsGroups;
+  protein: string[];
+  fat: string[];
+};
+
+type Props = {
+  mode: "create" | "edit";
+  editingMeal?: "breakfast" | "lunch" | "dinner";
+  initial?: MealSelections | null;
+  onCancelEdit?: () => void;
+  onSaved: (
+    mealName: "breakfast" | "lunch" | "dinner" | null,
+    meal: MealSelections
+  ) => void;
+  // when mode=create → mealName is null (parent decides the next slot)
+};
+
+// === Categorized options (Hebrew) ===
+// 1) Carbs 50% subdivided:
+const CARBS_GREENS = [
+  "פטרוזיליה",
+  "כוסברה",
+  "סלרי",
+  "נענע",
+  "חסה",
+  "בזיליקום",
+  "תרד",
+  "עלי ביבי",
+  "קייל",
+  "מנגולד",
+  "רוקט",
+  "שמיר",
+  "בוק צ'וי",
+  "חמציץ",
+  "בצל ירוק",
+  "אורגנו",
+  "עירית",
+  "נבטים - חופן",
+  "סלק ירוק",
+  "גרגר הנחלים - חופן",
+];
+
+const CARBS_GREEN_VEG = [
+  "אפונה הגינה - 150 גרם",
+  "שועית ירוקה - 150 גרם",
+  "זוקיני",
+  "קישוא",
+  "מלפפון",
+  "ברוקולי",
+  "דלורית",
+  "קולורבי",
+  "כרוב ניצנים",
+  "אספרגוס",
+  "במיה",
+  "לפט",
+  "ארטישוק ירושלמי",
+];
+
+const CARBS_RED_VEG = [
+  "סלק אדום",
+  "עגבניה",
+  "פלפל",
+  "גמבה",
+  "גזר",
+  "דלעת",
+  "תירס",
+  "חציל",
+  "כרובית",
+  "בצל",
+  "שום",
+  "צנון",
+  "צנונית",
+  "ארטישוק",
+];
+
+const CARBS_FRUITS_BONUS = [
+  "תפוח ירוק חמוץ - גראנדסמייט",
+  "אגס",
+  "בננה",
+  "תפוז",
+  "קלמנטינה",
+  "פירות יער - כוס",
+  "לימון",
+  "אשכולית",
+  "פומלה",
+  "אבטיח - 1/8",
+  "שזיף",
+  "אפרסק",
+  "דובדבן - 6 יחידות",
+  "תות שדה - 8 יחידות",
+  "קיווי - יחידה",
+  "רימון - רבע",
+  "פטל - 6 יחידות",
+  "אוכמניות - עד 20 יחידות",
+  // בונוס נוספים שהגדרת
+  "פטריות",
+  "חציל",
+  "כרובית",
+  "אספרגוס",
+  "ארטישוק",
+  "צנון",
+  "צנונית",
+  "לפט",
+  "רימון",
+  "תפוז",
+  "זיתים",
+  // פחמימות עמילניות המתאימות (כמו קודם)
+  "בטטה - עד 3 כפות",
+  "קינואה - 2 כפות",
+  "כוסמת ירוקה - 2 כפות",
+  "גרגירי חומוס - כף ביום",
+];
+
+// 2) Protein 40%
+const PROTEIN_OPTIONS = [
+  "ביצים - עד 3 ביום",
+  "גבינת עזים 5%",
+  "פטה עיזים 5%",
+  "יוגורט קפיר (180 גרם)",
+  "יוגורט עיזים 5% (180 גרם)",
+  "בשר אדום רזה - 200 גרם",
+  "דגי ים - 200 גרם",
+  "הודו - 200 גרם",
+  "עוף - 200 גרם",
+  "טופו - 200 גרם",
+  "טופו משי - 2 כפות",
+  "סרדינים בשימורים - 150 גרם",
+  "טונה בשימורים - 150 גרם",
+  "אדממה - 150 גרם",
+];
+
+// 3) Fat 10%
+const FAT_OPTIONS = [
+  "שמן זית כתית בכבישה קרה - כף אחת ביום",
+  "טחינה - כפית (לסרוגין)",
+  "אבוקדו - רבע עד חצי",
+  "זיתים - 4",
+  "צ'יאה (מושרה) - כפית",
+  "פשתן טחון - כפית",
+];
+
+const emptyCarbs: CarbsGroups = {
+  greens: [],
+  greenVeg: [],
+  redVeg: [],
+  fruitsBonus: [],
+};
+
+const PlatePlanner: React.FC<Props> = ({
+  mode,
+  editingMeal,
+  initial,
+  onCancelEdit,
+  onSaved,
+}) => {
+  const [carbs, setCarbs] = useState<CarbsGroups>(initial?.carbs ?? emptyCarbs);
+  const [protein, setProtein] = useState<string[]>(initial?.protein ?? []);
+  const [fat, setFat] = useState<string[]>(initial?.fat ?? []);
+
+  useEffect(() => {
+    if (mode === "edit" && initial) {
+      setCarbs(initial.carbs);
+      setProtein(initial.protein);
+      setFat(initial.fat);
+    }
+  }, [mode, initial]);
+
+  const canSave =
+    carbs.greens.length +
+      carbs.greenVeg.length +
+      carbs.redVeg.length +
+      carbs.fruitsBonus.length >
+      0 &&
+    protein.length > 0 &&
+    fat.length > 0;
+
+  const toggle = (
+    list: string[],
+    setter: (v: string[]) => void,
+    item: string
+  ) => {
+    setter(
+      list.includes(item) ? list.filter((x) => x !== item) : [...list, item]
+    );
   };
 
-  const toggleItem = (cat: CategoryKey, item: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev[cat]);
-      if (next.has(item)) next.delete(item);
-      else next.add(item);
-      return { ...prev, [cat]: next };
-    });
-  };
+  const save = async () => {
+    if (!canSave) return;
 
-  const closeAndSave = () => setOpenFor(null);
+    const payload = { carbs, protein, fat };
+
+    // Decide meal target:
+    // - edit mode: send to the meal we're editing
+    // - create mode: parent will decide next slot; we pass null
+    const targetMeal: "breakfast" | "lunch" | "dinner" | null =
+      mode === "edit" ? editingMeal ?? null : null;
+
+    if (targetMeal) {
+      await api.post(`/api/user/meals/${targetMeal}`, {
+        carbs,
+        protein,
+        fat,
+      });
+    }
+    onSaved(targetMeal, payload);
+
+    if (mode === "create") {
+      // reset for next plate
+      setCarbs(emptyCarbs);
+      setProtein([]);
+      setFat([]);
+    }
+  };
 
   return (
-    <div className="sp-card">
-      <h3 style={{ marginTop: 0 }}>Plate Planner</h3>
-
-      {/* Plate visualization */}
-      <div className="sp-plate-wrap">
-        <div
-          className="sp-plate"
-          aria-label="Nutrition plate divided into 4 sections"
-        />
-
-        {/* Hotspots (positions are approximate for good UX) */}
-        {/* Fiber (top half, 50%) */}
-        <div className="sp-plate-hotspot sp-hot-fiber">
-          <div className="sp-plate-title">Dietary Fiber (50%)</div>
-          <button className="sp-badge" onClick={() => toggleOpen("fiber")}>
-            Add
-          </button>
-        </div>
-
-        {/* Protein (right-upper, 20%) */}
-        <div className="sp-plate-hotspot sp-hot-protein">
-          <div className="sp-plate-title">Protein (20%)</div>
-          <button className="sp-badge" onClick={() => toggleOpen("protein")}>
-            Add
-          </button>
-        </div>
-
-        {/* Fat (right-lower, 15%) */}
-        <div className="sp-plate-hotspot sp-hot-fat">
-          <div className="sp-plate-title">Fat (15%)</div>
-          <button className="sp-badge" onClick={() => toggleOpen("fat")}>
-            Add
-          </button>
-        </div>
-
-        {/* Carbs (left-lower, 15%) */}
-        <div className="sp-plate-hotspot sp-hot-carbs">
-          <div className="sp-plate-title">Complex Carbs (15%)</div>
-          <button className="sp-badge" onClick={() => toggleOpen("carbs")}>
-            Add
-          </button>
-        </div>
-
-        {/* Dropdown popover */}
-        {openFor && (
-          <div className="sp-dropdown" role="dialog" aria-modal="true">
-            <div className="sp-dropdown-header">
-              <strong>{CATEGORY_LABELS[openFor]}</strong>
-            </div>
-            <div className="sp-dropdown-body">
-              {SHOPPING_OPTIONS[openFor].map((item) => {
-                const checked = selected[openFor].has(item);
-                return (
-                  <label key={item} className="sp-dropdown-item">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleItem(openFor, item)}
-                    />
-                    <span>{item}</span>
-                  </label>
-                );
-              })}
-            </div>
-            <div className="sp-dropdown-footer">
-              <button className="sp-btn" onClick={closeAndSave}>
-                Select
-              </button>
-              <button className="sp-btn" onClick={() => setOpenFor(null)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
+    <div className="sp-card" style={{ display: "grid", gap: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+        }}
+      >
+        <h3 style={{ margin: 0 }}>
+          {mode === "edit" ? "עריכת צלחת" : "צלחת היומית"}
+        </h3>
+        <RoundPlate />
       </div>
 
-      {/* Selections summary (under plate, mirrors categories) */}
-      <div className="sp-plate-summary">
-        {(["fiber", "protein", "fat", "carbs"] as CategoryKey[]).map((cat) => (
-          <div key={cat} className="sp-plate-summary-col">
-            <div className="sp-plate-summary-title">{CATEGORY_LABELS[cat]}</div>
-            {selected[cat].size === 0 ? (
-              <div className="sp-plate-summary-empty">
-                — No items selected —
-              </div>
-            ) : (
-              <ul className="sp-plate-summary-list">
-                {Array.from(selected[cat]).map((it) => (
-                  <li key={it}>{it}</li>
-                ))}
-              </ul>
-            )}
+      {/* Carbs groups */}
+      <div className="sp-card" style={{ background: "#fff" }}>
+        <div style={{ fontWeight: 800, marginBottom: 6 }}>פחמימות (50%)</div>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>עלים ירוקים</div>
+            <div className="sp-list-grid">
+              {CARBS_GREENS.map((item) => (
+                <label key={item} className="sp-check">
+                  <input
+                    type="checkbox"
+                    checked={carbs.greens.includes(item)}
+                    onChange={() =>
+                      setCarbs({
+                        ...carbs,
+                        greens: toggleRet(carbs.greens, item),
+                      })
+                    }
+                  />
+                  <span>{item}</span>
+                </label>
+              ))}
+            </div>
           </div>
-        ))}
+
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>ירקות ירוקים</div>
+            <div className="sp-list-grid">
+              {CARBS_GREEN_VEG.map((item) => (
+                <label key={item} className="sp-check">
+                  <input
+                    type="checkbox"
+                    checked={carbs.greenVeg.includes(item)}
+                    onChange={() =>
+                      setCarbs({
+                        ...carbs,
+                        greenVeg: toggleRet(carbs.greenVeg, item),
+                      })
+                    }
+                  />
+                  <span>{item}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>ירקות אדומים</div>
+            <div className="sp-list-grid">
+              {CARBS_RED_VEG.map((item) => (
+                <label key={item} className="sp-check">
+                  <input
+                    type="checkbox"
+                    checked={carbs.redVeg.includes(item)}
+                    onChange={() =>
+                      setCarbs({
+                        ...carbs,
+                        redVeg: toggleRet(carbs.redVeg, item),
+                      })
+                    }
+                  />
+                  <span>{item}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+              פירות + בונוס
+            </div>
+            <div className="sp-list-grid">
+              {CARBS_FRUITS_BONUS.map((item) => (
+                <label key={item} className="sp-check">
+                  <input
+                    type="checkbox"
+                    checked={carbs.fruitsBonus.includes(item)}
+                    onChange={() =>
+                      setCarbs({
+                        ...carbs,
+                        fruitsBonus: toggleRet(carbs.fruitsBonus, item),
+                      })
+                    }
+                  />
+                  <span>{item}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Protein */}
+      <div className="sp-card" style={{ background: "#fff" }}>
+        <div style={{ fontWeight: 800, marginBottom: 6 }}>חלבון (40%)</div>
+        <div className="sp-list-grid">
+          {PROTEIN_OPTIONS.map((item) => (
+            <label key={item} className="sp-check">
+              <input
+                type="checkbox"
+                checked={protein.includes(item)}
+                onChange={() => toggle(protein, setProtein, item)}
+              />
+              <span>{item}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Fat */}
+      <div className="sp-card" style={{ background: "#fff" }}>
+        <div style={{ fontWeight: 800, marginBottom: 6 }}>שומן (10%)</div>
+        <div className="sp-list-grid">
+          {FAT_OPTIONS.map((item) => (
+            <label key={item} className="sp-check">
+              <input
+                type="checkbox"
+                checked={fat.includes(item)}
+                onChange={() => toggle(fat, setFat, item)}
+              />
+              <span>{item}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        {mode === "edit" && (
+          <button className="sp-badge" type="button" onClick={onCancelEdit}>
+            ביטול
+          </button>
+        )}
+        <button className="sp-badge" disabled={!canSave} onClick={save}>
+          {mode === "edit" ? "שמור שינויים" : "שמור צלחת"}
+        </button>
       </div>
     </div>
   );
 };
 
 export default PlatePlanner;
+
+// helper to return new array without mutating original
+function toggleRet(list: string[], item: string) {
+  return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
+}

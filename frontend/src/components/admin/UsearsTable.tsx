@@ -5,15 +5,32 @@ import { computeBMI } from "./bmi";
 type Props = {
   users: User[];
   onDelete: (id: string, email: string) => void;
-  onPlanUpdate: (id: string, currentPlan: string | null) => void; // kept for future, not rendered
+  onPlanUpdate: (id: string, currentPlan: string | null) => void;
   onMessage: (id: string) => void;
-  unreadMap?: Record<string, number>; // <-- NEW: map userId -> unread count
+  onMeals?: (id: string) => void;
+  unreadMap?: Record<string, number>;
 };
+
+function formatDateDDMMYYYY(input: any): string {
+  if (!input) return "—";
+  // If DB gives "YYYY-MM-DD"
+  if (typeof input === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input)) {
+    const [y, m, d] = input.split("-");
+    return `${d}.${m}.${y}`;
+  }
+  const dt = new Date(input);
+  if (Number.isNaN(dt.getTime())) return String(input);
+  const dd = String(dt.getDate()).padStart(2, "0");
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const yy = dt.getFullYear();
+  return `${dd}.${mm}.${yy}`;
+}
 
 const UsersTable: React.FC<Props> = ({
   users,
   onDelete,
   onMessage,
+  onMeals,
   unreadMap,
 }) => {
   const [detailsUser, setDetailsUser] = useState<User | null>(null);
@@ -28,23 +45,33 @@ const UsersTable: React.FC<Props> = ({
               <th className="sp-th">Age</th>
               <th className="sp-th">Goal</th>
               <th className="sp-th">BMI</th>
-              <th className="sp-th">Diet Time</th>
+              <th className="sp-th">Diet Dates</th>
               <th className="sp-th">Actions</th>
             </tr>
           </thead>
           <tbody>
             {users.map((u) => {
-              const ageToShow = u.q_age ?? u.age;
-              const goalToShow = u.program_goal ?? "—";
+              const ageToShow = (u as any).q_age ?? u.age;
+              const goalToShow = (u as any).program_goal ?? "—";
+
               const { bmi, label, color } = computeBMI(u);
               const bmiDisplay = bmi === null ? "—" : `${bmi} (${label})`;
+
+              const start = (u as any).diet_start_date;
+              const end = (u as any).diet_end_date;
+              const dietRange =
+                start && end
+                  ? `start: '${formatDateDDMMYYYY(
+                      start
+                    )}' →  end: '${formatDateDDMMYYYY(end)}'`
+                  : "N/A";
 
               const hasUnread = !!unreadMap && unreadMap[u.id] > 0;
 
               return (
                 <tr key={u.id}>
                   <td className="sp-td">{u.name || "—"}</td>
-                  <td className="sp-td">{ageToShow}</td>
+                  <td className="sp-td">{ageToShow ?? "—"}</td>
                   <td className="sp-td">{goalToShow}</td>
                   <td
                     className="sp-td"
@@ -52,7 +79,7 @@ const UsersTable: React.FC<Props> = ({
                   >
                     {bmiDisplay}
                   </td>
-                  <td className="sp-td">{u.diet_time || "N/A"}</td>
+                  <td className="sp-td">{dietRange}</td>
                   <td className="sp-td">
                     <div className="sp-actions">
                       <button
@@ -61,10 +88,11 @@ const UsersTable: React.FC<Props> = ({
                       >
                         Delete
                       </button>
+
                       <button
                         className="sp-btn"
                         onClick={() => onMessage(u.id)}
-                        // Red background when there are unread messages from this user
+                        title={hasUnread ? "Unread messages" : "Message"}
                         style={
                           hasUnread
                             ? {
@@ -74,16 +102,25 @@ const UsersTable: React.FC<Props> = ({
                               }
                             : undefined
                         }
-                        title={hasUnread ? "Unread messages" : "Message"}
                       >
                         Message
                       </button>
+
                       <button
                         className="sp-btn"
                         onClick={() => setDetailsUser(u)}
                       >
                         Details
                       </button>
+
+                      {onMeals && (
+                        <button
+                          className="sp-btn"
+                          onClick={() => onMeals(u.id)}
+                        >
+                          Meals
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -93,7 +130,7 @@ const UsersTable: React.FC<Props> = ({
         </table>
       </div>
 
-      {/* Details Modal */}
+      {/* Details Modal (unchanged except dates are shown in table; modal keeps full info) */}
       {detailsUser && (
         <div className="sp-modal-overlay" onClick={() => setDetailsUser(null)}>
           <div className="sp-modal" onClick={(e) => e.stopPropagation()}>
@@ -129,36 +166,73 @@ const UsersTable: React.FC<Props> = ({
                     </tr>
                     {[
                       [
+                        "Diet start",
+                        (detailsUser as any).diet_start_date ?? "—",
+                      ],
+                      ["Diet end", (detailsUser as any).diet_end_date ?? "—"],
+                      [
                         "גובה",
-                        detailsUser.height ?? detailsUser.height_profile,
+                        (detailsUser as any).height ??
+                          (detailsUser as any).height_profile,
                       ],
                       [
                         "משקל",
-                        detailsUser.weight ?? detailsUser.weight_profile,
+                        (detailsUser as any).weight ??
+                          (detailsUser as any).weight_profile,
                       ],
-                      ["גיל", detailsUser.q_age ?? detailsUser.age],
-                      ["אלרגיות/רגישויות", detailsUser.allergies],
-                      ["מטרת התוכנית", detailsUser.program_goal],
-                      ["מה תרצי לשפר", detailsUser.body_improvement],
-                      ["בעיות רפואיות", detailsUser.medical_issues],
-                      ["נוטלת תרופות", detailsUser.takes_medications],
-                      ["הריון/אחרי לידה", detailsUser.pregnant_or_postpartum],
-                      ["תסמיני גיל המעבר", detailsUser.menopause_symptoms],
-                      ["ארוחת בוקר קבועה", detailsUser.breakfast_regular],
-                      ["עצירויות/נפיחות/עיכול", detailsUser.digestion_issues],
-                      ["נשנוש בין ארוחות", detailsUser.snacking_between_meals],
-                      ["אכילה מסודרת ביום", detailsUser.organized_eating],
-                      ["הימנעות מקבוצות מזון", detailsUser.avoid_food_groups],
-                      ["מים ביום", detailsUser.water_intake],
-                      ["תזונה", detailsUser.diet_type],
-                      ["פעילות גופנית סדירה", detailsUser.regular_activity],
-                      ["תדירות אימונים", detailsUser.training_frequency],
-                      ["סוג פעילות", detailsUser.activity_type],
-                      ["תחושה כללית", detailsUser.body_feeling],
-                      ["שעות שינה רצופות", detailsUser.sleep_hours],
+                      [
+                        "גיל",
+                        (detailsUser as any).q_age ?? (detailsUser as any).age,
+                      ],
+                      ["אלרגיות/רגישויות", (detailsUser as any).allergies],
+                      ["מטרת התוכנית", (detailsUser as any).program_goal],
+                      ["מה תרצי לשפר", (detailsUser as any).body_improvement],
+                      ["בעיות רפואיות", (detailsUser as any).medical_issues],
+                      ["נוטלת תרופות", (detailsUser as any).takes_medications],
+                      [
+                        "הריון/אחרי לידה",
+                        (detailsUser as any).pregnant_or_postpartum,
+                      ],
+                      [
+                        "תסמיני גיל המעבר",
+                        (detailsUser as any).menopause_symptoms,
+                      ],
+                      [
+                        "ארוחת בוקר קבועה",
+                        (detailsUser as any).breakfast_regular,
+                      ],
+                      [
+                        "עצירויות/נפיחות/עיכול",
+                        (detailsUser as any).digestion_issues,
+                      ],
+                      [
+                        "נשנוש בין ארוחות",
+                        (detailsUser as any).snacking_between_meals,
+                      ],
+                      [
+                        "אכילה מסודרת ביום",
+                        (detailsUser as any).organized_eating,
+                      ],
+                      [
+                        "הימנעות מקבוצות מזון",
+                        (detailsUser as any).avoid_food_groups,
+                      ],
+                      ["מים ביום", (detailsUser as any).water_intake],
+                      ["תזונה", (detailsUser as any).diet_type],
+                      [
+                        "פעילות גופנית סדירה",
+                        (detailsUser as any).regular_activity,
+                      ],
+                      [
+                        "תדירות אימונים",
+                        (detailsUser as any).training_frequency,
+                      ],
+                      ["סוג פעילות", (detailsUser as any).activity_type],
+                      ["תחושה כללית", (detailsUser as any).body_feeling],
+                      ["שעות שינה רצופות", (detailsUser as any).sleep_hours],
                       [
                         "נשלח בתאריך",
-                        detailsUser.submitted_at
+                        (detailsUser as any).submitted_at
                           ?.slice(0, 19)
                           ?.replace("T", " "),
                       ],

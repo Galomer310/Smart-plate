@@ -1,138 +1,110 @@
-// backend/routes/user.routes.ts
-import { Router, type Request, type Response, type NextFunction } from "express";
-import { pool } from "../src/db";
-import { requireAuth, type AuthedRequest } from "../auth/guards";
+import { Router } from "express";
 import { z } from "zod";
+import { pool } from "../src/db";
+import { AuthedRequest, requireAuth } from "../auth/guards";
 
 const router = Router();
+const APP_TZ = process.env.APP_TZ || "UTC";
 
-/* ---------------------------------- */
-/* Helper functions (plan window)     */
-/* ---------------------------------- */
-
-// Parse a number of days out of a free-form diet_time string, e.g. "21 days" -> 21
-function parseDietDays(text?: string | null): number {
-  if (!text) return 0;
-  const m = String(text).match(/\d+/);
-  return m ? Math.max(0, parseInt(m[0], 10)) : 0;
-}
-
-function toDateOnly(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-function addDays(d: Date, n: number): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
-}
-function diffDays(a: Date, b: Date): number {
-  return Math.floor((toDateOnly(a).getTime() - toDateOnly(b).getTime()) / 86_400_000);
-}
-
-/**
- * Load plan info for a user from DB and compute enroll/start/end & diet-day counters.
- * Returns JS Dates and flags. Throws if user not found.
- */
-export async function getPlanInfoForUser(userId: string) {
-  const { rows } = await pool.query<{ created_at: Date; diet_time: string | null }>(
-    "SELECT created_at, diet_time FROM users WHERE id = $1",
-    [userId]
-  );
-  const row = rows[0];
-  if (!row) throw new Error("User not found");
-
-  const enrollDate = toDateOnly(new Date(row.created_at));
-  const startDate = addDays(enrollDate, 1); // diet starts the day after registration
-  const dietDays = parseDietDays(row.diet_time);
-
-  const endDate = dietDays > 0 ? addDays(startDate, dietDays - 1) : startDate;
-
-  const today = toDateOnly(new Date());
-  let todayDietDay = 0;
-  if (today >= startDate) {
-    todayDietDay = diffDays(today, startDate) + 1; // 1-based
-  }
-  const expired = dietDays > 0 && todayDietDay > dietDays;
-
-  return { enrollDate, startDate, endDate, dietDays, todayDietDay, expired };
-}
-
-/**
- * Middleware to use in your REFRESH route.
- * Assumes you already verified the refresh token and set res.locals.userId = <uuid>.
- *
- * Example in auth.routes.ts (inside refresh handler, after verifying RT):
- *   res.locals.userId = payload.sub;
- *   await blockIfPlanExpiredForRefresh(req, res, next); // will end response if expired
- *   // then issue new access token...
- */
-export async function blockIfPlanExpiredForRefresh(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
-  try {
-    const userId: string | undefined =
-      (res.locals && res.locals.userId) || (req as any).userId;
-
-    if (!userId) {
-      return res.status(400).json({ error: "Missing userId for plan check" });
-    }
-
-    const plan = await getPlanInfoForUser(userId);
-    if (plan.expired) {
-      // Stop refresh: clear refresh cookie and refuse new access token
-      res.clearCookie("rt", {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        path: "/", // adjust if you set a custom path for the RT cookie
-      });
-      return res.status(403).json({ error: "Plan expired" });
-    }
-
-    return next();
-  } catch (e) {
-    console.error("[refresh-plan-guard] error:", e);
-    return res.status(500).json({ error: "Error checking plan window" });
-  }
-}
-
-/* ---------------------------------- */
-/* Questionnaire endpoints             */
-/* ---------------------------------- */
-
-/** GET current user's questionnaire (if exists) */
-router.get("/questionnaire", requireAuth, async (req: AuthedRequest, res) => {
-  if (req.user!.role !== "user") {
-    return res
-      .status(403)
-      .json({ error: "Forbidden (admin cannot submit questionnaire)" });
-  }
+/* ------------------------- Plan endpoint (prefers explicit dates) ------------------------- */
+router.get("/plan", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "user") return res.status(403).json({ error: "Forbidden" });
   const userId = req.user!.sub;
 
   try {
-    const { rows } = await pool.query(
-      `SELECT * FROM user_questionnaire WHERE user_id=$1`,
-      [userId]
+    const q = await pool.query(
+      `
+      SELECT
+        diet_start_date,
+        diet_end_date,
+        (created_at AT TIME ZONE $1)::date AS created_local,
+        (now()       AT TIME ZONE $1)::date AS today_local
+      FROM users
+      WHERE id=$2
+      LIMIT 1
+      `,
+      [APP_TZ, userId]
     );
-    if (!rows[0]) return res.json({ exists: false });
-    return res.json({ exists: true, data: rows[0] });
+    const row = q.rows[0];
+    if (!row) return res.status(404).json({ error: "User not found" });
+
+    let startDate: string | null = row.diet_start_date;
+    let endDate: string | null   = row.diet_end_date;
+
+    // Legacy fallback: if not set, start = created+1, end = null (unknown)
+    if (!startDate) {
+      const s = new Date(`${row.created_local}T00:00:00Z`);
+      const sPlus1 = new Date(s.getTime() + 1 * 86400000);
+      startDate = sPlus1.toISOString().slice(0, 10);
+    }
+
+    const todayStr: string = row.today_local;
+    const today = new Date(`${todayStr}T00:00:00Z`);
+    const s = startDate ? new Date(`${startDate}T00:00:00Z`) : null;
+
+    let dayIndex = 0;
+    let dietDays = 0;
+    let expired = false;
+
+    if (s) {
+      if (today < s) dayIndex = 0;
+      else dayIndex = Math.floor((today.getTime() - s.getTime()) / 86400000) + 1;
+    }
+
+    if (startDate && endDate) {
+      const e = new Date(`${endDate}T00:00:00Z`);
+      dietDays = Math.floor((e.getTime() - new Date(`${startDate}T00:00:00Z`).getTime()) / 86400000) + 1;
+      expired = today > e;
+      // clamp dayIndex to [1..dietDays]
+      if (dayIndex > dietDays) dayIndex = dietDays;
+    }
+
+    return res.json({
+      startDate,
+      endDate,
+      dietDays,
+      dayIndex,
+      expired,
+      tz: APP_TZ,
+    });
   } catch (e) {
-    console.error("[GET /questionnaire] DB error:", e);
-    return res
-      .status(500)
-      .json({ error: "Database error while reading questionnaire" });
+    console.error("[GET /api/user/plan] error:", e);
+    return res.status(500).json({ error: "Failed to compute plan" });
   }
 });
 
-// Zod schema: only height, weight (text) are free, age is coerced and validated
+/* ------------------------- Meals: today's snapshot ------------------------- */
+router.get("/meals", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "user") return res.status(403).json({ error: "Forbidden" });
+  const userId = req.user!.sub;
+
+  try {
+    const dQ = await pool.query(`SELECT (now() AT TIME ZONE $1)::date AS today`, [APP_TZ]);
+    const today: string = dQ.rows[0].today;
+
+    const { rows } = await pool.query(
+      `SELECT id, meal_date, meal_name, carbs, protein, fat
+       FROM user_meals
+       WHERE user_id=$1 AND meal_date=$2
+       ORDER BY meal_name`,
+      [userId, today]
+    );
+
+    const byName: Record<string, any> = {};
+    for (const r of rows) byName[r.meal_name] = r;
+
+    return res.json({ meals: rows, byName, date: today });
+  } catch (e) {
+    console.error("[GET /api/user/meals] error:", e);
+    return res.status(500).json({ error: "Failed to load meals" });
+  }
+});
+
+/* ------------------------- Questionnaire (get/upsert) ------------------------- */
 const questionnaireSchema = z.object({
   height: z.string().trim().min(1, "גובה נדרש"),
   weight: z.string().trim().min(1, "משקל נדרש"),
-  age: z
-    .coerce.number()
-    .int()
-    .min(20, "הגיל חייב להיות בין 20 ל-90")
-    .max(90, "הגיל חייב להיות בין 20 ל-90"),
+  age: z.coerce.number().int().min(20).max(90),
 
   allergies: z.string().optional(),
   program_goal: z.string().optional(),
@@ -156,19 +128,30 @@ const questionnaireSchema = z.object({
   sleep_hours: z.string().optional(),
 });
 
-/** POST submit questionnaire */
-router.post("/questionnaire", requireAuth, async (req: AuthedRequest, res) => {
-  if (req.user!.role !== "user") {
-    return res
-      .status(403)
-      .json({ error: "Forbidden (admin cannot submit questionnaire)" });
-  }
+router.get("/questionnaire", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "user") return res.status(403).json({ error: "Forbidden" });
   const userId = req.user!.sub;
 
-  // Validate & coerce
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM user_questionnaire WHERE user_id=$1`,
+      [userId]
+    );
+    if (!rows[0]) return res.json({ exists: false });
+    return res.json({ exists: true, data: rows[0] });
+  } catch (e) {
+    console.error("[GET /api/user/questionnaire] error:", e);
+    return res.status(500).json({ error: "Database error" });
+  }
+});
+
+router.post("/questionnaire", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "user") return res.status(403).json({ error: "Forbidden" });
+  const userId = req.user!.sub;
+
   const parsed = questionnaireSchema.safeParse(req.body);
   if (!parsed.success) {
-    const issues = parsed.error.issues.map((i) => i.message).join(", ");
+    const issues = parsed.error.issues.map(i => i.message).join(", ");
     return res.status(400).json({ error: `Validation error: ${issues}` });
   }
   const q = parsed.data;
@@ -181,14 +164,14 @@ router.post("/questionnaire", requireAuth, async (req: AuthedRequest, res) => {
         medical_issues, takes_medications, pregnant_or_postpartum, menopause_symptoms,
         breakfast_regular, digestion_issues, snacking_between_meals, organized_eating,
         avoid_food_groups, water_intake, diet_type, regular_activity, training_place,
-        training_frequency, activity_type, body_feeling, sleep_hours
+        training_frequency, activity_type, body_feeling, sleep_hours, submitted_at
       )
       VALUES (
         $1,$2,$3,$4,$5,$6,$7,
         $8,$9,$10,$11,
         $12,$13,$14,$15,
         $16,$17,$18,$19,$20,
-        $21,$22,$23,$24
+        $21,$22,$23,$24, now()
       )
       ON CONFLICT (user_id) DO UPDATE SET
         height=EXCLUDED.height,
@@ -218,75 +201,46 @@ router.post("/questionnaire", requireAuth, async (req: AuthedRequest, res) => {
       `,
       [
         userId,
-        q.height,
-        q.weight,
-        q.age,
-        q.allergies ?? null,
-        q.program_goal ?? null,
-        q.body_improvement ?? null,
-        q.medical_issues ?? null,
-        q.takes_medications ?? null,
-        q.pregnant_or_postpartum ?? null,
-        q.menopause_symptoms ?? null,
-        q.breakfast_regular ?? null,
-        q.digestion_issues ?? null,
-        q.snacking_between_meals ?? null,
-        q.organized_eating ?? null,
-        q.avoid_food_groups ?? null,
-        q.water_intake ?? null,
-        q.diet_type ?? null,
-        q.regular_activity ?? null,
-        q.training_place ?? null,
-        q.training_frequency ?? null,
-        q.activity_type ?? null,
-        q.body_feeling ?? null,
-        q.sleep_hours ?? null,
+        q.height, q.weight, q.age,
+        q.allergies ?? null, q.program_goal ?? null, q.body_improvement ?? null,
+        q.medical_issues ?? null, q.takes_medications ?? null, q.pregnant_or_postpartum ?? null, q.menopause_symptoms ?? null,
+        q.breakfast_regular ?? null, q.digestion_issues ?? null, q.snacking_between_meals ?? null, q.organized_eating ?? null,
+        q.avoid_food_groups ?? null, q.water_intake ?? null, q.diet_type ?? null, q.regular_activity ?? null, q.training_place ?? null,
+        q.training_frequency ?? null, q.activity_type ?? null, q.body_feeling ?? null, q.sleep_hours ?? null,
       ]
     );
     return res.json({ ok: true });
-  } catch (e: any) {
-    console.error("[POST /questionnaire] DB error:", e);
-    // Common guardrails: missing table or wrong column types
-    if (e?.code === "42P01") {
-      return res.status(500).json({
-        error:
-          "Database table user_questionnaire does not exist. Run the provided SQL migration.",
-      });
-    }
-    return res
-      .status(500)
-      .json({ error: "Database error while saving questionnaire" });
-  }
-});
-
-/* ---------------------------------- */
-/* Plan info endpoint                  */
-/* ---------------------------------- */
-
-/** GET current user plan window & diet-day counter */
-router.get("/plan", requireAuth, async (req: AuthedRequest, res) => {
-  if (req.user!.role !== "user") {
-    return res.status(403).json({ error: "Forbidden" });
-  }
-  const userId = req.user!.sub;
-
-  try {
-    const plan = await getPlanInfoForUser(userId);
-    const { enrollDate, startDate, endDate, dietDays, todayDietDay, expired } =
-      plan;
-
-    return res.json({
-      enrollDate: enrollDate.toISOString(),
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
-      dietDays,
-      todayDietDay,
-      expired,
-    });
   } catch (e) {
-    console.error("[GET /plan] error:", e);
-    return res.status(500).json({ error: "Failed to compute plan window" });
+    console.error("[POST /api/user/questionnaire] error:", e);
+    return res.status(500).json({ error: "Database error" });
   }
 });
+
+/* Optional: named export used by /auth/refresh if you wired it earlier */
+export async function blockIfPlanExpiredForRefresh(req: any, res: any, next: any) {
+  try {
+    const userId = res.locals?.userId || req.user?.sub;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const q = await pool.query(
+      `SELECT diet_start_date, diet_end_date FROM users WHERE id=$1`,
+      [userId]
+    );
+    const row = q.rows[0];
+    if (!row) return res.status(401).json({ error: "Unauthorized" });
+
+    const todayStr = (await pool.query(`SELECT (now() AT TIME ZONE $1)::date AS d`, [APP_TZ])).rows[0].d as string;
+
+    if (row.diet_start_date && row.diet_end_date) {
+      const end = new Date(`${row.diet_end_date}T00:00:00Z`);
+      const today = new Date(`${todayStr}T00:00:00Z`);
+      if (today > end) return res.status(403).json({ error: "Plan expired" });
+    }
+    return next();
+  } catch (e) {
+    console.error("[blockIfPlanExpiredForRefresh] error:", e);
+    return res.status(500).json({ error: "Internal error" });
+  }
+}
 
 export default router;
