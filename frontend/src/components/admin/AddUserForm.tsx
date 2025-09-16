@@ -58,11 +58,14 @@ const AddUserForm: React.FC<Props> = ({ onCreated }) => {
   return (
     <div className="sp-card">
       <h2 style={{ marginTop: 0 }}>Add New User</h2>
+
+      {/* Keep the same grid; just span dates to full width below the first row */}
       <form
         onSubmit={handleSubmit}
         className="sp-grid"
         style={{ gap: "0.75rem" }}
       >
+        {/* First row */}
         <input
           className="sp-input"
           placeholder="Name"
@@ -84,76 +87,39 @@ const AddUserForm: React.FC<Props> = ({ onCreated }) => {
           onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
         />
 
-        {/* date fields with small headers + inline placeholders */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "0.75rem",
-          }}
-        >
-          {/* Start date */}
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <small style={{ marginBottom: 4, color: "#555" }}>Start date</small>
-            <div style={{ position: "relative" }}>
-              {!newUser.startDate && (
-                <span
-                  style={{
-                    position: "absolute",
-                    left: 12,
-                    top: 10,
-                    color: "#888",
-                    pointerEvents: "none",
-                    fontSize: 13,
-                  }}
-                >
-                  (select start date)
-                </span>
-              )}
-              <input
-                className="sp-input"
-                type="date"
-                value={newUser.startDate || ""}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, startDate: e.target.value })
-                }
-                style={{ position: "relative", background: "transparent" }}
-                aria-label="Start date"
-              />
-            </div>
-          </div>
+        {/* Start date: full width, under first row */}
+        <div style={{ gridColumn: "1 / -1", marginTop: "0.25rem" }}>
+          <small style={{ marginBottom: 4, color: "#555", display: "block" }}>
+            Start date
+          </small>
+          <input
+            className="sp-input"
+            type="date"
+            value={newUser.startDate || ""}
+            onChange={(e) =>
+              setNewUser({ ...newUser, startDate: e.target.value })
+            }
+            aria-label="Start date"
+            style={{ width: "50%" }}
+          />
+        </div>
 
-          {/* End date */}
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <small style={{ marginBottom: 4, color: "#555" }}>End date</small>
-            <div style={{ position: "relative" }}>
-              {!newUser.endDate && (
-                <span
-                  style={{
-                    position: "absolute",
-                    left: 12,
-                    top: 10,
-                    color: "#888",
-                    pointerEvents: "none",
-                    fontSize: 13,
-                  }}
-                >
-                  (select end date)
-                </span>
-              )}
-              <input
-                className="sp-input"
-                type="date"
-                value={newUser.endDate || ""}
-                min={newUser.startDate || undefined}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, endDate: e.target.value })
-                }
-                style={{ position: "relative", background: "transparent" }}
-                aria-label="End date"
-              />
-            </div>
-          </div>
+        {/* End date: full width, on its own line */}
+        <div style={{ gridColumn: "1 / -1" }}>
+          <small style={{ marginBottom: 4, color: "#555", display: "block" }}>
+            End date
+          </small>
+          <input
+            className="sp-input"
+            type="date"
+            value={newUser.endDate || ""}
+            min={newUser.startDate || undefined}
+            onChange={(e) =>
+              setNewUser({ ...newUser, endDate: e.target.value })
+            }
+            aria-label="End date"
+            style={{ width: "50%" }}
+          />
         </div>
 
         <button
