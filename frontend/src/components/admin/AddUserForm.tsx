@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import api from "../../api";
 
 type Props = { onCreated: () => void };
@@ -10,6 +10,9 @@ const plusDaysISO = (d: number) => {
   return t.toISOString().slice(0, 10);
 };
 
+const pwdPolicy = /^(?=.*\d)(?=.*[^\w\s]).{8,64}$/; // UPDATED
+const emailPolicy = /^\S+@\S+\.\S+$/;
+
 const AddUserForm: React.FC<Props> = ({ onCreated }) => {
   const [newUser, setNewUser] = useState({
     name: "",
@@ -19,26 +22,39 @@ const AddUserForm: React.FC<Props> = ({ onCreated }) => {
     endDate: plusDaysISO(21),
   });
 
+  const emailValid = useMemo(
+    () => emailPolicy.test(newUser.email),
+    [newUser.email]
+  );
+  const passwordValid = useMemo(
+    () => pwdPolicy.test(newUser.password),
+    [newUser.password]
+  );
+
+  const datesValid = useMemo(() => {
+    const s = new Date(newUser.startDate);
+    const e = new Date(newUser.endDate);
+    return !Number.isNaN(s.getTime()) && !Number.isNaN(e.getTime()) && s <= e;
+  }, [newUser.startDate, newUser.endDate]);
+
+  const canSubmit =
+    newUser.name.trim().length > 0 && emailValid && passwordValid && datesValid;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { name, email, password, startDate, endDate } = newUser;
 
-    if (!name || !email || !password || !startDate || !endDate) {
-      alert("Please fill all fields.");
-      return;
-    }
-    if (new Date(startDate) > new Date(endDate)) {
-      alert("End date must be on/after start date");
+    if (!canSubmit) {
+      alert("Please fix validation errors before submitting.");
       return;
     }
 
     try {
       await api.post("/api/admin/users", {
-        name,
-        email,
-        password,
-        startDate,
-        endDate,
+        name: newUser.name,
+        email: newUser.email,
+        password: newUser.password,
+        startDate: newUser.startDate,
+        endDate: newUser.endDate,
       });
       alert("User created successfully");
       setNewUser({
@@ -59,35 +75,66 @@ const AddUserForm: React.FC<Props> = ({ onCreated }) => {
     <div className="sp-card">
       <h2 style={{ marginTop: 0 }}>Add New User</h2>
 
-      {/* Keep the same grid; just span dates to full width below the first row */}
       <form
         onSubmit={handleSubmit}
         className="sp-grid"
         style={{ gap: "0.75rem" }}
       >
-        {/* First row */}
-        <input
-          className="sp-input"
-          placeholder="Name"
-          value={newUser.name}
-          onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-        />
-        <input
-          className="sp-input"
-          type="email"
-          placeholder="Email"
-          value={newUser.email}
-          onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-        />
-        <input
-          className="sp-input"
-          type="password"
-          placeholder="Password"
-          value={newUser.password}
-          onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-        />
+        {/* First row: Name / Email / Password */}
+        <div>
+          <input
+            className="sp-input"
+            placeholder="Name"
+            value={newUser.name}
+            onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+          />
+          <small style={{ display: "block", marginTop: 4, color: "#666" }}>
+            Full name (letters/spaces). / שם מלא
+          </small>
+        </div>
 
-        {/* Start date: full width, under first row */}
+        <div>
+          <input
+            className="sp-input"
+            type="email"
+            placeholder="Email"
+            value={newUser.email}
+            onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+          />
+          <small
+            style={{
+              display: "block",
+              marginTop: 4,
+              color: emailValid ? "#3a7" : "#b00020",
+            }}
+          >
+            Use a valid email like <em>user@example.com</em>. / כתובת מייל תקינה
+          </small>
+        </div>
+
+        <div>
+          <input
+            className="sp-input"
+            type="password"
+            placeholder="Password"
+            value={newUser.password}
+            onChange={(e) =>
+              setNewUser({ ...newUser, password: e.target.value })
+            }
+          />
+          <small
+            style={{
+              display: "block",
+              marginTop: 4,
+              color: passwordValid ? "#3a7" : "#b00020",
+            }}
+          >
+            8–64 chars, include a number and a symbol. / סיסמה באורך 8–64 תווים
+            עם ספרה אחת ותו מיוחד אחד
+          </small>
+        </div>
+
+        {/* Start date: full width, below first row */}
         <div style={{ gridColumn: "1 / -1", marginTop: "0.25rem" }}>
           <small style={{ marginBottom: 4, color: "#555", display: "block" }}>
             Start date
@@ -100,8 +147,11 @@ const AddUserForm: React.FC<Props> = ({ onCreated }) => {
               setNewUser({ ...newUser, startDate: e.target.value })
             }
             aria-label="Start date"
-            style={{ width: "50%" }}
+            style={{ width: "100%" }}
           />
+          <small style={{ display: "block", marginTop: 4, color: "#666" }}>
+            Format: YYYY-MM-DD. / תבנית תאריך: YYYY-MM-DD
+          </small>
         </div>
 
         {/* End date: full width, on its own line */}
@@ -118,14 +168,25 @@ const AddUserForm: React.FC<Props> = ({ onCreated }) => {
               setNewUser({ ...newUser, endDate: e.target.value })
             }
             aria-label="End date"
-            style={{ width: "50%" }}
+            style={{ width: "100%" }}
           />
+          <small
+            style={{
+              display: "block",
+              marginTop: 4,
+              color: datesValid ? "#3a7" : "#b00020",
+            }}
+          >
+            Must be the same or after the start date. / חייב להיות מאוחר או שווה
+            לתאריך ההתחלה
+          </small>
         </div>
 
         <button
           type="submit"
           className="sp-btn"
           style={{ gridColumn: "1 / -1" }}
+          disabled={!canSubmit}
         >
           Create User
         </button>

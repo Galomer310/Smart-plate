@@ -1,24 +1,20 @@
-import jwt, { SignOptions } from "jsonwebtoken";
-import { JWT_SECRET, JWT_REFRESH_SECRET } from "../src/env";
+import jwt from "jsonwebtoken";
 
-export interface JwtPayload {
-  sub: string;               // user id
+const JWT_SECRET = process.env.JWT_SECRET as string;
+if (!JWT_SECRET) throw new Error("JWT_SECRET is not set");
+
+export type TokenPayload = {
+  id: string;
+  sub?: string;
   role: "admin" | "user";
-  first_login: boolean;
-}
+  first_login?: boolean;
+  must_change_password?: boolean;
+};
 
-export function signAccessToken(payload: JwtPayload, opts: SignOptions = {}) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "15m", ...opts });
-}
+export const signAccess = (p: TokenPayload) =>
+  jwt.sign({ ...p, sub: p.sub ?? p.id }, JWT_SECRET, { expiresIn: "1h" });
 
-export function signRefreshToken(payload: JwtPayload, opts: SignOptions = {}) {
-  return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: "30d", ...opts });
-}
+export const signRefresh = (p: TokenPayload) =>
+  jwt.sign({ ...p, sub: p.sub ?? p.id }, JWT_SECRET, { expiresIn: "7d" });
 
-export function verifyAccessToken(token: string): JwtPayload {
-  return jwt.verify(token, JWT_SECRET) as JwtPayload;
-}
-
-export function verifyRefreshToken(token: string): JwtPayload {
-  return jwt.verify(token, JWT_REFRESH_SECRET) as JwtPayload;
-}
+export const verifyToken = (t: string) => jwt.verify(t, JWT_SECRET) as TokenPayload;

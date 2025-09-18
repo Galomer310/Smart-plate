@@ -19,9 +19,9 @@ const AdminLogin: React.FC = () => {
         "/api/admin/login",
         credentials
       );
-      // Save admin token and clear any user token to avoid role confusion
+      // Save admin token (and mirror to generic key for any shared interceptors)
       localStorage.setItem("adminToken", r.data.token);
-      localStorage.removeItem("accessToken");
+      localStorage.setItem("token", r.data.token);
       navigate("/admin/dashboard");
     } catch (err: any) {
       const msg = err?.response?.data?.error || "Invalid admin credentials";

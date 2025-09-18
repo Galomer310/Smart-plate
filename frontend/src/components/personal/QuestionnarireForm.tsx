@@ -29,7 +29,7 @@ export type Questionnaire = {
 };
 
 type Props = {
-  onSubmitted: () => Promise<void> | void; // parent (PersonalArea) will reload status/plan
+  onSubmitted: () => Promise<void> | void; // parent (PersonalArea) will handle next step
 };
 
 const QuestionnaireForm: React.FC<Props> = ({ onSubmitted }) => {

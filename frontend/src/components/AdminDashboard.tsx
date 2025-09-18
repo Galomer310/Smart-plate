@@ -26,20 +26,25 @@ const AdminDashboard: React.FC = () => {
     bmi: "",
   });
 
-  // Map userId -> unread count (for Message button coloring)
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
 
   const adminToken = localStorage.getItem("adminToken");
 
+  const authHeader = adminToken
+    ? { Authorization: `Bearer ${adminToken}` }
+    : undefined;
+
   const fetchUsers = async () => {
-    const r = await api.get<DashboardResponse>("/api/admin/dashboard");
+    const r = await api.get<DashboardResponse>("/api/admin/dashboard", {
+      headers: authHeader,
+    });
     setUsers(r.data.users ?? []);
   };
 
   const fetchUnreadThreads = async () => {
     if (!adminToken) return;
     const r = await api.get<{ threads: Thread[] }>("/api/messages/threads", {
-      headers: { Authorization: `Bearer ${adminToken}` }, // force admin token for messages API
+      headers: authHeader,
     });
     const next: Record<string, number> = {};
     for (const t of r.data.threads || []) {
@@ -67,12 +72,11 @@ const AdminDashboard: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminToken]);
 
-  // Filters (Name, Age, Plan/Diet time, BMI color)
   const filteredUsers = useMemo(() => {
     const nameQ = filters.name.trim().toLowerCase();
     const planQ = filters.plan.trim().toLowerCase();
     const ageQ = filters.age.trim();
-    const bmiQ = filters.bmi; // '', 'green', 'yellow', 'red'
+    const bmiQ = filters.bmi;
 
     return users.filter((u) => {
       if (nameQ) {
@@ -80,12 +84,12 @@ const AdminDashboard: React.FC = () => {
         if (!n.includes(nameQ)) return false;
       }
       if (ageQ) {
-        const ageVal = u.q_age ?? u.age;
+        const ageVal = (u as any).q_age ?? (u as any).age;
         if (String(ageVal) !== ageQ) return false;
       }
       if (planQ) {
-        const d = (u.diet_time || u.subscription_plan || "").toLowerCase();
-        if (!d.includes(planQ)) return false;
+        const d = (u as any).diet_time || (u as any).subscription_plan || "";
+        if (!d.toLowerCase().includes(planQ)) return false;
       }
       if (bmiQ) {
         const { color } = computeBMI(u);
@@ -106,7 +110,7 @@ const AdminDashboard: React.FC = () => {
     );
     if (!confirmDelete) return;
     try {
-      await api.delete(`/api/admin/users/${userId}`);
+      await api.delete(`/api/admin/users/${userId}`, { headers: authHeader });
       await refetchAll();
       alert("User deleted successfully");
     } catch (error: any) {
@@ -116,7 +120,7 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handlePlanUpdate = async (_id: string, _currentPlan: string | null) => {
-    // kept for future use; not rendered in the table currently
+    // reserved for future use
   };
 
   const handleMessage = (userId: string) => {

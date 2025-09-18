@@ -16,6 +16,9 @@ import AdminLogin from "./components/Login/AdminLogin";
 import AdminMessagesPage from "./components/messages/AdminMessagesPage";
 import UserMessagesPage from "./components/messages/UserMessagesPage";
 
+// ✅ New: force password change page
+import ForcePasswordChange from "./components/ForcePasswordChange";
+
 export default function App() {
   return (
     <>
@@ -31,6 +34,11 @@ export default function App() {
         <Route
           path="/messages/conversation/:otherId"
           element={<UserMessagesPage />}
+        />
+        {/* ✅ New route */}
+        <Route
+          path="/force-password-change"
+          element={<ForcePasswordChange />}
         />
 
         {/* Admin */}

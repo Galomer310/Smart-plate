@@ -1,184 +1,208 @@
-// frontend/src/components/PersonalArea.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
-
-// Local building blocks
-import QuestionnaireForm from "./personal/QuestionnarireForm";
 import PlanHeader from "./personal/PlanHeader";
 import PlatePlanner, { type MealSelections } from "./personal/PlatePlanner";
 import ShoppingMenuCard from "./personal/ShoppingMenuCard";
-
+import QuestionnaireForm from "./personal/QuestionnarireForm";
+import type { PlanInfo } from "./personal/types";
 import "./personal/personal.css";
 
-// ---- Server response shape (from /api/user/plan)
-type ApiPlan = {
-  startDate: string | null;
-  endDate: string | null;
-  dietDays: number;
-  dayIndex: number; // server's "today day index"
-  expired: boolean;
-  tz?: string;
+type QuestionnaireGet = { exists: boolean };
+
+type MealsState = {
+  date: string; // YYYY-MM-DD (server TZ)
+  breakfast?: { selections: MealSelections; savedAt: string };
+  lunch?: { selections: MealSelections; savedAt: string };
+  dinner?: { selections: MealSelections; savedAt: string };
 };
-
-// ---- UI plan shape used by your personal components
-type PlanInfo = {
-  startDate: string | null;
-  endDate: string | null;
-  dietDays: number;
-  todayDietDay: number; // renamed from server's dayIndex
-  expired: boolean;
-};
-
-type MealName = "breakfast" | "lunch" | "dinner";
-type MealRow = { selections: MealSelections; savedAt: string };
-type MealsByName = Partial<Record<MealName, MealRow>>;
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const PersonalArea: React.FC = () => {
   const navigate = useNavigate();
 
-  // Questionnaire gate
-  const [hasQuestionnaire, setHasQuestionnaire] = useState<boolean>(true);
-
-  // Plan (dates + counters)
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [needsQuestionnaire, setNeedsQuestionnaire] = useState(false);
   const [plan, setPlan] = useState<PlanInfo | null>(null);
 
-  // Meals for *today*
-  const [meals, setMeals] = useState<MealsByName>({});
+  const [meals, setMeals] = useState<MealsState | null>(null);
+  const [hasUnread, setHasUnread] = useState(false);
 
-  // Editing state (when user taps "עריכה" on a saved meal)
-  const [editing, setEditing] = useState<MealName | null>(null);
-
-  // ---- Loaders ------------------------------------------------------------
-  const loadQuestionnaireStatus = async () => {
-    try {
-      const r = await api.get<{ exists: boolean }>("/api/user/questionnaire");
-      setHasQuestionnaire(!!r.data.exists);
-    } catch {
-      // If the route returns 404 for no questionnaire table, treat as not submitted
-      setHasQuestionnaire(false);
-    }
-  };
-
-  const loadPlan = async () => {
-    try {
-      const r = await api.get<ApiPlan>("/api/user/plan");
-      const p = r.data;
-      // Convert server shape -> UI shape
-      const uiPlan: PlanInfo = {
-        startDate: p.startDate,
-        endDate: p.endDate,
-        dietDays: p.dietDays ?? 0,
-        todayDietDay: p.dayIndex ?? 0,
-        expired: !!p.expired,
-      };
-      setPlan(uiPlan);
-    } catch {
-      // If a user has dates missing, keep plan null (UI stays minimal)
-      setPlan(null);
-    }
-  };
+  const [editing, setEditing] = useState<
+    null | "breakfast" | "lunch" | "dinner"
+  >(null);
+  const [editingInitial, setEditingInitial] = useState<MealSelections | null>(
+    null
+  );
 
   const loadMealsForToday = async () => {
+    const todayRes = await api.get<any>("/api/user/meals");
+    setMeals({
+      date: todayRes.data.date,
+      breakfast: todayRes.data.breakfast ?? undefined,
+      lunch: todayRes.data.lunch ?? undefined,
+      dinner: todayRes.data.dinner ?? undefined,
+    });
+  };
+
+  const loadStatus = async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
-      const r = await api.get<{ meals: MealsByName }>("/api/user/meals", {
-        params: { date: todayISO() },
-      });
-      setMeals(r.data.meals || {});
-    } catch {
-      setMeals({});
+      // 1) Do we need to fill the questionnaire?
+      const r = await api.get<QuestionnaireGet>("/api/user/questionnaire");
+      const exists = r.data.exists === true;
+      setNeedsQuestionnaire(!exists);
+
+      // If questionnaire not done yet -> allow it first (as per your flow)
+      if (!exists) {
+        setPlan(null);
+        setMeals(null);
+        return;
+      }
+
+      // 2) Questionnaire exists: enforce password change BEFORE entering personal area
+      const me = await api.get<{ mustChangePassword: boolean }>("/api/auth/me");
+      if (me.data.mustChangePassword) {
+        navigate("/force-password-change", { replace: true });
+        return;
+      }
+
+      // 3) Load rest of the personal area
+      try {
+        const planRes = await api.get<PlanInfo>("/api/user/plan");
+        setPlan(planRes.data);
+      } catch {
+        setPlan(null);
+      }
+      await loadMealsForToday();
+    } catch (e: any) {
+      setLoadError(e?.response?.data?.error || e?.message || "Failed to load");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadAll = async () => {
-    await loadQuestionnaireStatus();
-    await loadPlan();
-    await loadMealsForToday();
+  const loadUnread = async () => {
+    try {
+      const r = await api.get<{ threads: Array<{ unread_count: number }> }>(
+        "/api/messages/threads"
+      );
+      const unread = Number(r.data.threads?.[0]?.unread_count ?? 0) > 0;
+      setHasUnread(unread);
+    } catch {
+      setHasUnread(false);
+    }
   };
 
   useEffect(() => {
-    loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    (async () => {
+      await loadStatus();
+      await loadUnread();
+    })();
   }, []);
 
-  // ---- Helpers ------------------------------------------------------------
-  const nextEmptySlot = useMemo<MealName | null>(() => {
-    if (!meals.breakfast) return "breakfast";
-    if (!meals.lunch) return "lunch";
-    if (!meals.dinner) return "dinner";
-    return null;
-  }, [meals]);
+  const openMessages = () => navigate("/messages");
 
-  const goToMessages = () => {
-    navigate("/messages");
+  const handleSaved = (
+    mealName: "breakfast" | "lunch" | "dinner" | null,
+    sel: MealSelections
+  ): void => {
+    void (async () => {
+      let target = mealName;
+      if (!target) {
+        target = !meals?.breakfast
+          ? "breakfast"
+          : !meals?.lunch
+          ? "lunch"
+          : !meals?.dinner
+          ? "dinner"
+          : null;
+      }
+      if (!target) {
+        alert("כבר קיימות 3 ארוחות היום");
+        return;
+      }
+      await api.post(`/api/user/meals/${target}`, sel);
+      await loadMealsForToday();
+    })();
   };
 
-  // ---- Save handlers ------------------------------------------------------
-  const saveMeal = async (slot: MealName, s: MealSelections) => {
-    await api.post(`/api/user/meals/${slot}`, s);
-    await loadMealsForToday();
+  const startEdit = (which: "breakfast" | "lunch" | "dinner") => {
+    if (!meals) return;
+    const m = meals[which];
+    if (!m) return;
+    setEditing(which);
+    setEditingInitial(m.selections);
   };
 
-  // Callback from PlatePlanner:
-  // - In "create" mode it passes `mealName=null`, so we choose nextEmptySlot.
-  // - In "edit" mode it passes the specific meal name that was edited.
-  const handlePlateSaved = async (
-    mealName: MealName | null,
-    selections: MealSelections
-  ) => {
-    const target = mealName ?? nextEmptySlot;
-    if (!target) {
-      alert("כבר נשמרו שלוש ארוחות להיום");
-      return;
-    }
-    await saveMeal(target, selections);
+  const cancelEdit = () => {
     setEditing(null);
+    setEditingInitial(null);
   };
 
-  const cancelEdit = () => setEditing(null);
-
-  // When editing, provide the current selections to the planner
-  const editingInitial: MealSelections | null = editing
-    ? meals[editing]?.selections ?? null
-    : null;
-
-  // For the calendar: make PlanHeader render from plan.startDate
-  // (it reads enrollDate for the calendar start; we add it without changing PlanInfo)
-  const planForCalendar = plan ? { ...plan, enrollDate: plan.startDate } : null;
-
-  // ---- Render gates -------------------------------------------------------
-  if (!hasQuestionnaire) {
-    return <QuestionnaireForm onSubmitted={loadAll} />;
+  if (loading) return <div className="sp-personal">טוען.</div>;
+  if (loadError) {
+    return (
+      <div className="sp-personal">
+        <div className="sp-card" style={{ color: "#b00020" }}>
+          {loadError}
+        </div>
+        <button
+          className="sp-badge"
+          onClick={() => {
+            loadStatus();
+            loadUnread();
+          }}
+        >
+          נסה שוב
+        </button>
+      </div>
+    );
   }
 
-  return (
-    <div className="sp-personal" style={{ direction: "rtl" }}>
-      {/* Header with calendar & “messages” button */}
-      <PlanHeader plan={planForCalendar as any} onOpenMessages={goToMessages} />
-
-      {/* Two-column layout: left = plate planner, right = notes/saved meals */}
-      <div
-        className="sp-grid"
-        style={{
-          gridTemplateColumns: "1fr 1fr",
-          gap: 16,
-          alignItems: "start",
-          marginTop: 16,
+  // Questionnaire first
+  if (needsQuestionnaire) {
+    return (
+      <QuestionnaireForm
+        onSubmitted={() => {
+          // after questionnaire, go to forced password change
+          navigate("/force-password-change", { replace: true });
         }}
-      >
-        {/* Plate builder (create or edit) */}
+      />
+    );
+  }
+
+  // Normal personal area
+  return (
+    <div className="sp-personal">
+      <PlanHeader plan={plan} onOpenMessages={openMessages} />
+      <div style={{ margin: "8px 0" }}>
+        <button
+          className="sp-badge"
+          onClick={openMessages}
+          style={hasUnread ? { color: "#b00020" } : undefined}
+        >
+          הודעות
+        </button>
+      </div>
+
+      <div className="sp-main-grid">
         <PlatePlanner
           mode={editing ? "edit" : "create"}
           editingMeal={editing ?? undefined}
           initial={editingInitial}
           onCancelEdit={cancelEdit}
-          onSaved={handlePlateSaved}
+          onSaved={handleSaved}
         />
-
-        {/* Notes + the three saved meals (with “עריכה” buttons) */}
-        <ShoppingMenuCard meals={meals} onEdit={(which) => setEditing(which)} />
+        <ShoppingMenuCard
+          meals={{
+            breakfast: meals?.breakfast,
+            lunch: meals?.lunch,
+            dinner: meals?.dinner,
+          }}
+          onEdit={startEdit}
+        />
       </div>
     </div>
   );
