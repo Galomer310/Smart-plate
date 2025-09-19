@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { User } from "./types";
 import { computeBMI } from "./bmi";
 import api from "../../api";

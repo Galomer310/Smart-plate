@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import api from "../api";
+import api from "../../api";
 
 const CHANGE_PASSWORD_ENDPOINT = "/api/auth/change-password";
 const AFTER_CHANGE_REDIRECT = "/personal";

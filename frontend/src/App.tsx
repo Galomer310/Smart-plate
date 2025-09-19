@@ -1,3 +1,10 @@
+// src/App.tsx
+// App routing for Smart-Plate
+// - Reflects your new folder moves
+// - Adds an admin messages list route (/admin/messages) in addition to the
+//   param route (/admin/messages/:otherId)
+// - Keeps user messaging routes and personal flows intact
+
 import { Routes, Route } from "react-router-dom";
 
 // Layout
@@ -5,8 +12,8 @@ import Navbar from "./components/Navbar";
 
 // Pages / Feature roots
 import HomePage from "./pages/HomePage";
-import PersonalArea from "./components/PersonalArea";
-import AdminDashboard from "./components/AdminDashboard";
+import PersonalArea from "./components/personal/PersonalArea";
+import AdminDashboard from "./components/admin/AdminDashboard";
 
 // Logins
 import Login from "./components/Login/Login";
@@ -16,13 +23,14 @@ import AdminLogin from "./components/Login/AdminLogin";
 import AdminMessagesPage from "./components/messages/AdminMessagesPage";
 import UserMessagesPage from "./components/messages/UserMessagesPage";
 
-// ✅ New: force password change page
-import ForcePasswordChange from "./components/ForcePasswordChange";
+// Force password change (moved into personal/)
+import ForcePasswordChange from "./components/personal/ForcePasswordChange";
 
 export default function App() {
   return (
     <>
       <Navbar />
+
       <Routes>
         {/* Public */}
         <Route path="/" element={<HomePage />} />
@@ -35,7 +43,6 @@ export default function App() {
           path="/messages/conversation/:otherId"
           element={<UserMessagesPage />}
         />
-        {/* ✅ New route */}
         <Route
           path="/force-password-change"
           element={<ForcePasswordChange />}
@@ -44,6 +51,8 @@ export default function App() {
         {/* Admin */}
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        {/* NEW: allow opening admin messages without specifying a user id */}
+        <Route path="/admin/messages" element={<AdminMessagesPage />} />
         <Route
           path="/admin/messages/:otherId"
           element={<AdminMessagesPage />}

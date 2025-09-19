@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../api";
-import "./admin/admin.css";
+import api from "../../api";
+import "../admin/admin.css";
 
-import AddUserForm from "./admin/AddUserForm";
-import UserFilters, { type Filters } from "./admin/UserFillters";
-import UsersTable from "./admin/UsearsTable";
+import AddUserForm from "../admin/AddUserForm";
+import UserFilters, { type Filters } from "../admin/UserFillters";
+import UsersTable from "../admin/UsearsTable";
 
-import type { DashboardResponse, User } from "./admin/types";
-import { computeBMI } from "./admin/bmi";
+import type { DashboardResponse, User } from "../admin/types";
+import { computeBMI } from "../admin/bmi";
 
 type Thread = {
   other_id: string;

@@ -2,16 +2,10 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
-import type { RootState } from "../store/srote"; // keep your current path
-import { logout } from "../store/authSlice";
+import type { RootState } from "../store/srote"; // ✅ ensure this path matches your project
+import { logout } from "../store/authSlice"; // ✅
 import axios from "axios";
-
-// ✅ Option A: import the asset from src/assets
-// Make sure the file is at: frontend/src/assets/smart-plate-logo.jpeg
 import logo from "../assets/smart-plate-logo.jpeg";
-
-// If you prefer Option B (public folder), remove the import above and set:
-// const logo = "/smart-plate-logo.jpeg";
 
 const Navbar: React.FC = () => {
   const tokenFromStore = useSelector((state: RootState) => state.auth.token);
@@ -19,10 +13,10 @@ const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
-  // Use redux token if present, otherwise fall back to localStorage (admin area)
+  // Prefer Redux token; fallback to explicit admin token for admin area
   const token = tokenFromStore || localStorage.getItem("adminToken") || "";
 
-  // Determine if the logged-in user is an admin (JWT payload has `role`)
+  // Determine role from token payload
   let isAdmin = false;
   if (token) {
     try {
@@ -36,28 +30,39 @@ const Navbar: React.FC = () => {
     }
   }
 
-  // For regular users (not admin), fetch unread admin messages
+  // Fetch unread for current principal (user OR admin)
   useEffect(() => {
-    if (token && !isAdmin) {
-      axios
-        .get("http://localhost:5000/api/messages/new", {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        .then((response) => {
-          const data = response.data as { messages: any[] };
-          setUnreadCount(data.messages.length);
-        })
-        .catch((error) => {
-          console.error("Error fetching unread messages in Navbar:", error);
-        });
-    }
-  }, [token, isAdmin]);
+    if (!token) return;
+    axios
+      .get("http://localhost:5000/api/messages/new", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((response) => {
+        const data = response.data as { messages: any[] };
+        setUnreadCount(data.messages.length || 0);
+      })
+      .catch((error) => {
+        console.error("Error fetching unread messages in Navbar:", error);
+      });
+  }, [token]);
 
   const handleMessagesClick = () => setUnreadCount(0);
 
+  const msgLink = isAdmin ? "/admin/messages" : "/messages";
+
+  const linkStyle =
+    unreadCount > 0
+      ? {
+          padding: "2px 8px",
+          borderRadius: 999,
+          color: "#fff",
+          background: "#d32f2f",
+        }
+      : undefined;
+
   const handleLogout = () => {
     dispatch(logout());
-    localStorage.removeItem("adminToken"); // ensure admin token is cleared too
+    localStorage.removeItem("adminToken");
     navigate("/");
   };
 
@@ -110,11 +115,8 @@ const Navbar: React.FC = () => {
 
         {token && (
           <li>
-            <Link to="/messages" onClick={handleMessagesClick}>
-              Messages{" "}
-              {unreadCount > 0 && (
-                <span style={{ color: "red" }}>({unreadCount})</span>
-              )}
+            <Link to={msgLink} onClick={handleMessagesClick} style={linkStyle}>
+              Messages {unreadCount > 0 && <span>({unreadCount})</span>}
             </Link>
           </li>
         )}

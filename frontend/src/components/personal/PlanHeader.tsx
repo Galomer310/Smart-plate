@@ -1,8 +1,30 @@
-import React from "react";
+import React, { useMemo } from "react";
 import type { PlanInfo } from "./types";
 import PlanCalendar from "./PlanCalender";
 import DietDayBadge from "./DietDayBadge";
 import "./personal.css";
+
+/** Robust date parser used across components */
+function parseDate(input?: any): Date | null {
+  if (!input) return null;
+  if (input instanceof Date && !Number.isNaN(input.getTime())) return input;
+
+  if (typeof input === "string") {
+    const iso = new Date(input);
+    if (!Number.isNaN(iso.getTime()))
+      return new Date(iso.getFullYear(), iso.getMonth(), iso.getDate());
+
+    const m = input.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) {
+      const dd = Number(m[1]),
+        mm = Number(m[2]) - 1,
+        yyyy = Number(m[3]);
+      const d = new Date(yyyy, mm, dd);
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+  }
+  return null;
+}
 
 type Props = {
   plan: PlanInfo | null;
@@ -10,11 +32,64 @@ type Props = {
 };
 
 const PlanHeader: React.FC<Props> = ({ plan, onOpenMessages }) => {
+  // Safely format dates; show "—" when invalid/missing
+  const enroll = parseDate(plan?.enrollDate);
+  const start = parseDate(plan?.startDate);
+  const end = parseDate(plan?.endDate);
+
+  const fmt = (d: Date | null) => (d ? d.toLocaleDateString() : "—");
+
+  // If plan.todayDietDay / plan.dietDays / plan.expired are missing,
+  // derive them from start/end so the badge never shows "undefined/null".
+  const derived = useMemo(() => {
+    const today = new Date();
+    const dayOnly = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate()
+    );
+    let todayDietDay: number | null = null;
+    let dietDays: number | null = null;
+    let expired = false;
+
+    if (start && end && end >= start) {
+      const diffFromStart =
+        Math.floor((dayOnly.getTime() - start.getTime()) / 86400000) + 1; // inclusive day 1
+      todayDietDay = diffFromStart;
+      dietDays =
+        Math.floor(
+          (new Date(
+            end.getFullYear(),
+            end.getMonth(),
+            end.getDate()
+          ).getTime() -
+            new Date(
+              start.getFullYear(),
+              start.getMonth(),
+              start.getDate()
+            ).getTime()) /
+            86400000
+        ) + 1;
+      expired = dayOnly.getTime() > end.getTime();
+    }
+    return { todayDietDay, dietDays, expired };
+  }, [plan?.startDate, plan?.endDate]);
+
+  // Merge derived values with the plan (without mutating the prop)
+  const normalizedPlan: PlanInfo | null = plan
+    ? {
+        ...plan,
+        todayDietDay: plan.todayDietDay ?? derived.todayDietDay ?? 0,
+        dietDays: plan.dietDays ?? derived.dietDays ?? 0,
+        expired: plan.expired ?? derived.expired ?? false,
+      }
+    : null;
+
   return (
     <div className="sp-plan-header">
       {/* Diet Day / quick actions */}
       <div>
-        <DietDayBadge plan={plan} />
+        <DietDayBadge plan={normalizedPlan} />
         <div
           className="sp-card"
           style={{
@@ -26,16 +101,13 @@ const PlanHeader: React.FC<Props> = ({ plan, onOpenMessages }) => {
         >
           <div>
             <div>
-              <strong>תאריך הרשמה:</strong>{" "}
-              {plan ? new Date(plan.enrollDate).toLocaleDateString() : "—"}
+              <strong>תאריך הרשמה:</strong> {fmt(enroll)}
             </div>
             <div>
-              <strong>התחלת תוכנית:</strong>{" "}
-              {plan ? new Date(plan.startDate).toLocaleDateString() : "—"}
+              <strong>התחלת תוכנית:</strong> {fmt(start)}
             </div>
             <div>
-              <strong>סיום תוכנית:</strong>{" "}
-              {plan ? new Date(plan.endDate).toLocaleDateString() : "—"}
+              <strong>סיום תוכנית:</strong> {fmt(end)}
             </div>
           </div>
           <button className="sp-badge" onClick={onOpenMessages}>
@@ -47,7 +119,7 @@ const PlanHeader: React.FC<Props> = ({ plan, onOpenMessages }) => {
       {/* Calendar */}
       <div className="sp-card">
         <h3 style={{ marginTop: 0 }}>לוח זמנים</h3>
-        <PlanCalendar plan={plan} />
+        <PlanCalendar plan={normalizedPlan} />
       </div>
     </div>
   );

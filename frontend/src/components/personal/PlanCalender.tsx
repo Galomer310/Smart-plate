@@ -4,7 +4,31 @@ import "./personal.css";
 
 type Props = { plan: PlanInfo | null };
 
-const toDateOnly = (iso?: string) => (iso ? new Date(iso) : null);
+/** Parse Date | ISO | DD/MM/YYYY to local date-only */
+function parseDate(input?: any): Date | null {
+  if (!input) return null;
+  if (input instanceof Date && !Number.isNaN(input.getTime()))
+    return new Date(input.getFullYear(), input.getMonth(), input.getDate());
+
+  if (typeof input === "string") {
+    // Try ISO first
+    const iso = new Date(input);
+    if (!Number.isNaN(iso.getTime()))
+      return new Date(iso.getFullYear(), iso.getMonth(), iso.getDate());
+
+    // Try DD/MM/YYYY
+    const m = input.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) {
+      const dd = Number(m[1]),
+        mm = Number(m[2]) - 1,
+        yyyy = Number(m[3]);
+      const d = new Date(yyyy, mm, dd);
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+  }
+  return null;
+}
+
 const addDays = (d: Date, n: number) =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const diffDays = (a: Date, b: Date) =>
@@ -27,19 +51,32 @@ const chunk = <T,>(arr: T[], size: number) =>
     return rows;
   }, []);
 
+function sameDate(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 const PlanCalendar: React.FC<Props> = ({ plan }) => {
-  const enroll = toDateOnly(plan?.enrollDate);
-  const start = toDateOnly(plan?.startDate);
-  const end = toDateOnly(plan?.endDate);
-  const today = new Date();
+  const enroll = parseDate(plan?.enrollDate);
+  const start = parseDate(plan?.startDate);
+  const end = parseDate(plan?.endDate);
+  const base = enroll || start; // ✅ fallback to start if enroll missing
+  const today = new Date(
+    new Date().getFullYear(),
+    new Date().getMonth(),
+    new Date().getDate()
+  );
 
   const days = useMemo(() => {
-    if (!enroll || !end) return [];
-    const total = diffDays(end, enroll) + 1; // inclusive
-    return Array.from({ length: Math.max(total, 1) }, (_, i) =>
-      addDays(enroll, i)
+    if (!base || !end) return [];
+    const total = diffDays(end, base) + 1; // inclusive
+    return Array.from({ length: Math.max(total, 0) }, (_, i) =>
+      addDays(base, i)
     );
-  }, [plan?.enrollDate, plan?.endDate]);
+  }, [plan?.enrollDate, plan?.startDate, plan?.endDate]);
 
   const weeks = useMemo(() => chunk(days, 7), [days]);
 
@@ -62,16 +99,10 @@ const PlanCalendar: React.FC<Props> = ({ plan }) => {
 
       <div className="sp-cal">
         {weeks.flat().map((d, idx) => {
-          const isEnroll = enroll && d.getTime() === enroll.getTime();
-          const isStart = start && d.getTime() === start.getTime();
-          const isEnd = end && d.getTime() === end.getTime();
-          const isToday =
-            d.toDateString() ===
-            new Date(
-              today.getFullYear(),
-              today.getMonth(),
-              today.getDate()
-            ).toDateString();
+          const isEnroll = enroll && sameDate(d, enroll);
+          const isStart = start && sameDate(d, start);
+          const isEnd = end && sameDate(d, end);
+          const isToday = sameDate(d, today);
 
           const cls = [
             "sp-cal-day",

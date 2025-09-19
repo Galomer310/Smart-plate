@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../api";
-import PlanHeader from "./personal/PlanHeader";
-import PlatePlanner, { type MealSelections } from "./personal/PlatePlanner";
-import ShoppingMenuCard from "./personal/ShoppingMenuCard";
-import QuestionnaireForm from "./personal/QuestionnarireForm";
-import type { PlanInfo } from "./personal/types";
-import "./personal/personal.css";
+import api from "../../api";
+import PlanHeader from "../personal/PlanHeader";
+import PlatePlanner, { type MealSelections } from "../personal/PlatePlanner";
+import ShoppingMenuCard from "../personal/ShoppingMenuCard";
+import QuestionnaireForm from "../personal/QuestionnarireForm";
+import type { PlanInfo } from "../personal/types";
+import "../personal/personal.css";
 
 type QuestionnaireGet = { exists: boolean };
 
