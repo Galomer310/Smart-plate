@@ -7,7 +7,7 @@ import App from "./App.tsx";
 import { BrowserRouter } from "react-router-dom";
 import { Provider } from "react-redux";
 // Keep this path consistent with your Navbar import:
-import store from "./store/srote"; // if your file is actually 'store.ts', update both places
+import store from "../src/store/srote.ts"; // if your file is actually 'store.ts', update both places
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

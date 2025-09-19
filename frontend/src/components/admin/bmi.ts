@@ -1,35 +1,72 @@
-import type { User } from "./types";
+// frontend/src/components/admin/bmi.ts
+// A robust BMI helper that tolerates different field names and units.
+// It safely parses height/weight from multiple possible keys (snake_case/camelCase)
+// and returns a normalized BMI result for UI consumption.
 
-export function parseNum(v?: string | number | null): number | null {
-  if (v === undefined || v === null) return null;
-  if (typeof v === "number") return isFinite(v) ? v : null;
-  const cleaned = String(v).replace(/[^\d.,]/g, "").replace(",", ".");
-  const n = parseFloat(cleaned);
-  return isFinite(n) ? n : null;
+export type BMIResult = {
+  bmi: number | null;      // e.g., 23.4 or null if unavailable
+  label: string;           // "Underweight", "Normal", "Overweight", "Obese", or "N/A"
+  color: string;           // background color suggestion for the cell
+};
+
+// ---- internal helpers -------------------------------------------------------
+
+function firstDefined<T = any>(obj: any, keys: string[]): T | undefined {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+  }
+  return undefined;
 }
 
-export function metersFromHeight(v?: string | number | null): number | null {
-  const n = parseNum(v);
-  if (n == null) return null;
-  if (n > 3) return n / 100;         // assume centimeters like "170"
-  if (n > 0 && n < 3.5) return n;    // meters like "1.70"
-  return null;
+function toNumber(x: any): number | null {
+  if (x === undefined || x === null) return null;
+  const s = String(x).replace(/[^\d.\-]/g, ""); // strip non-numeric (keeps dot/minus)
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
 }
 
-export function computeBMI(u: User): {
-  bmi: number | null;
-  label: "Under" | "Normal" | "Above" | "—";
-  color: string;               // background color
-  category: "yellow" | "green" | "red" | "none"; // for filtering
-} {
-  const h = metersFromHeight(u.height ?? u.height_profile);
-  const w = parseNum(u.weight ?? u.weight_profile);
-  if (!h || !w) return { bmi: null, label: "—", color: "transparent", category: "none" };
+function parseHeightMeters(raw: any): number | null {
+  // Accepts meters ("1.70") or centimeters ("170" or "170 cm")
+  const n = toNumber(raw);
+  if (n === null) return null;
+  if (n > 3) {
+    // assume centimeters if suspiciously large
+    return n / 100;
+  }
+  return n; // already meters
+}
 
-  const bmiVal = w / (h * h);
-  const bmi = Math.round(bmiVal * 10) / 10;
+function parseWeightKg(raw: any): number | null {
+  // Accepts kg ("70" or "70 kg")
+  const n = toNumber(raw);
+  return n === null ? null : n;
+}
 
-  if (bmi < 18.5) return { bmi, label: "Under",  color: "#fff3cd", category: "yellow" };
-  if (bmi <= 24.9) return { bmi, label: "Normal", color: "#d4edda", category: "green"  };
-  return                { bmi, label: "Above",  color: "#f8d7da", category: "red"    };
+// ---- main -------------------------------------------------------------------
+
+export function computeBMI(user: any): BMIResult {
+  // Try many possible keys (DB, profile, questionnaire)
+  const heightRaw =
+    firstDefined(user, ["height", "height_profile", "q_height", "user_height"]) ??
+    firstDefined(user, ["Height", "HeightProfile"]);
+  const weightRaw =
+    firstDefined(user, ["weight", "weight_profile", "q_weight", "user_weight"]) ??
+    firstDefined(user, ["Weight", "WeightProfile"]);
+
+  const h = parseHeightMeters(heightRaw);
+  const w = parseWeightKg(weightRaw);
+
+  if (!h || !w || h <= 0 || w <= 0) {
+    return { bmi: null, label: "N/A", color: "#f5f5f5" };
+  }
+
+  const bmi = Number((w / (h * h)).toFixed(1));
+
+  // WHO categories
+  if (bmi < 18.5) return { bmi, label: "Underweight", color: "#FFF3CD" }; // yellow
+  if (bmi < 25)   return { bmi, label: "Normal",      color: "#D7F7D7" }; // green
+  if (bmi < 30)   return { bmi, label: "Overweight",  color: "#FFE0B2" }; // orange
+  return                 { bmi, label: "Obese",       color: "#F8D7DA" }; // red
 }

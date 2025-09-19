@@ -1,3 +1,4 @@
+// frontend/src/components/admin/UsearsTable.tsx
 import React from "react";
 import type { User } from "./types";
 import { computeBMI } from "./bmi";
@@ -6,26 +7,43 @@ import UserDetailsAction from "./UserDetailsAction";
 type Props = {
   users: User[];
   onDelete: (id: string, email: string) => void;
-  onPlanUpdate?: (id: string, currentPlan: string | null) => void; // kept for API parity with your other actions
+  onPlanUpdate?: (id: string, currentPlan: string | null) => void;
   onMessage: (id: string) => void;
   onMeals?: (id: string) => void;
   unreadMap?: Record<string, number>;
 };
 
-function formatDateDDMMYYYY(input: any): string {
-  if (!input) return "—";
-  // If DB gives "YYYY-MM-DD"
+// --- helpers -----------------------------------------------------------------
+
+function firstDefined<T = any>(obj: any, keys: string[]): T | undefined {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== undefined && v !== null && String(v).trim?.() !== "") return v;
+  }
+  return undefined;
+}
+
+function toDateish(input: any): Date | null {
+  if (!input) return null;
   if (typeof input === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input)) {
-    const [y, m, d] = input.split("-");
-    return `${d}.${m}.${y}`;
+    // fast path YYYY-MM-DD
+    const [y, m, d] = input.split("-").map(Number);
+    return new Date(y, m - 1, d);
   }
   const dt = new Date(input);
-  if (Number.isNaN(dt.getTime())) return String(input);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function formatDateDDMMYYYY(input: any): string {
+  const dt = toDateish(input);
+  if (!dt) return "—";
   const dd = String(dt.getDate()).padStart(2, "0");
   const mm = String(dt.getMonth() + 1).padStart(2, "0");
   const yy = dt.getFullYear();
   return `${dd}.${mm}.${yy}`;
 }
+
+// -----------------------------------------------------------------------------
 
 const UserTable: React.FC<Props> = ({
   users,
@@ -49,20 +67,28 @@ const UserTable: React.FC<Props> = ({
         </thead>
         <tbody>
           {users.map((u) => {
-            const ageToShow = (u as any).q_age ?? u.age;
-            const goalToShow = (u as any).program_goal ?? "—";
+            // Age & Goal: tolerate DB/profile/questionnaire differences
+            const ageToShow =
+              firstDefined(u, ["age", "q_age", "user_age"]) ?? "—";
+            const goalToShow =
+              firstDefined(u, ["program_goal", "goal", "user_goal"]) ?? "—";
+
+            // BMI using robust helper (handles meter/cm + multiple keys)
             const { bmi, label, color } = computeBMI(u);
             const bmiDisplay = bmi === null ? "—" : `${bmi} (${label})`;
 
-            const start = (u as any).diet_start_date;
-            const end = (u as any).diet_end_date;
+            // Diet dates: accept both snake_case and camelCase
+            const start =
+              firstDefined(u, ["diet_start_date", "dietStartDate"]) ?? null;
+            const end =
+              firstDefined(u, ["diet_end_date", "dietEndDate"]) ?? null;
 
             const hasUnread = !!unreadMap && (unreadMap[u.id] ?? 0) > 0;
 
             return (
               <tr key={u.id}>
                 <td className="sp-td">{u.name || "—"}</td>
-                <td className="sp-td">{ageToShow ?? "—"}</td>
+                <td className="sp-td">{ageToShow}</td>
                 <td className="sp-td">{goalToShow}</td>
                 <td
                   className="sp-td"
@@ -71,12 +97,12 @@ const UserTable: React.FC<Props> = ({
                   {bmiDisplay}
                 </td>
 
-                {/* Diet Dates: start on top line, end on bottom line */}
+                {/* Diet start (top) / Diet end (bottom) */}
                 <td className="sp-td">
                   {start || end ? (
                     <div style={{ display: "grid", gap: 4, lineHeight: 1.2 }}>
-                      <div>{start ? formatDateDDMMYYYY(start) : "—"}</div>
-                      <div>{end ? formatDateDDMMYYYY(end) : "—"}</div>
+                      <div>{formatDateDDMMYYYY(start)}</div>
+                      <div>{formatDateDDMMYYYY(end)}</div>
                     </div>
                   ) : (
                     "N/A"
@@ -109,7 +135,7 @@ const UserTable: React.FC<Props> = ({
                       Message
                     </button>
 
-                    {/* Details action moved to its own component */}
+                    {/* The Details button + modal */}
                     <UserDetailsAction user={u} className="sp-btn" />
 
                     {onMeals && (
