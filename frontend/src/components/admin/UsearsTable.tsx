@@ -10,11 +10,10 @@ type Props = {
   onPlanUpdate?: (id: string, currentPlan: string | null) => void;
   onMessage: (id: string) => void;
   onMeals?: (id: string) => void;
-  unreadMap?: Record<string, number>;
+  unreadMap?: Record<string, number>; // userId -> unread count
 };
 
-// --- helpers -----------------------------------------------------------------
-
+// small helpers
 function firstDefined<T = any>(obj: any, keys: string[]): T | undefined {
   for (const k of keys) {
     const v = obj?.[k];
@@ -22,18 +21,15 @@ function firstDefined<T = any>(obj: any, keys: string[]): T | undefined {
   }
   return undefined;
 }
-
 function toDateish(input: any): Date | null {
   if (!input) return null;
   if (typeof input === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input)) {
-    // fast path YYYY-MM-DD
     const [y, m, d] = input.split("-").map(Number);
     return new Date(y, m - 1, d);
   }
   const dt = new Date(input);
   return Number.isNaN(dt.getTime()) ? null : dt;
 }
-
 function formatDateDDMMYYYY(input: any): string {
   const dt = toDateish(input);
   if (!dt) return "—";
@@ -43,9 +39,7 @@ function formatDateDDMMYYYY(input: any): string {
   return `${dd}.${mm}.${yy}`;
 }
 
-// -----------------------------------------------------------------------------
-
-const UserTable: React.FC<Props> = ({
+const UsersTable: React.FC<Props> = ({
   users,
   onDelete,
   onMessage,
@@ -67,23 +61,21 @@ const UserTable: React.FC<Props> = ({
         </thead>
         <tbody>
           {users.map((u) => {
-            // Age & Goal: tolerate DB/profile/questionnaire differences
             const ageToShow =
               firstDefined(u, ["age", "q_age", "user_age"]) ?? "—";
             const goalToShow =
               firstDefined(u, ["program_goal", "goal", "user_goal"]) ?? "—";
 
-            // BMI using robust helper (handles meter/cm + multiple keys)
             const { bmi, label, color } = computeBMI(u);
             const bmiDisplay = bmi === null ? "—" : `${bmi} (${label})`;
 
-            // Diet dates: accept both snake_case and camelCase
             const start =
               firstDefined(u, ["diet_start_date", "dietStartDate"]) ?? null;
             const end =
               firstDefined(u, ["diet_end_date", "dietEndDate"]) ?? null;
 
-            const hasUnread = !!unreadMap && (unreadMap[u.id] ?? 0) > 0;
+            const unread = Number(unreadMap?.[u.id] ?? 0);
+            const hasUnread = unread > 0;
 
             return (
               <tr key={u.id}>
@@ -96,8 +88,6 @@ const UserTable: React.FC<Props> = ({
                 >
                   {bmiDisplay}
                 </td>
-
-                {/* Diet start (top) / Diet end (bottom) */}
                 <td className="sp-td">
                   {start || end ? (
                     <div style={{ display: "grid", gap: 4, lineHeight: 1.2 }}>
@@ -108,7 +98,6 @@ const UserTable: React.FC<Props> = ({
                     "N/A"
                   )}
                 </td>
-
                 <td className="sp-td">
                   <div className="sp-actions">
                     <button
@@ -118,24 +107,30 @@ const UserTable: React.FC<Props> = ({
                       Delete
                     </button>
 
+                    {/* SOLID RED when specific user has unread */}
                     <button
                       className="sp-btn"
+                      aria-label={
+                        hasUnread
+                          ? `Unread from ${u.name}`
+                          : `Message ${u.name}`
+                      }
                       onClick={() => onMessage(u.id)}
-                      title={hasUnread ? "Unread messages" : "Message"}
                       style={
                         hasUnread
                           ? {
-                              background: "#ffeaea",
-                              color: "#b00020",
-                              borderColor: "#f4b1b4",
+                              background: "#d32f2f",
+                              color: "#fff",
+                              borderColor: "#d32f2f",
+                              fontWeight: 700,
                             }
                           : undefined
                       }
+                      title={hasUnread ? `Unread (${unread})` : "Message"}
                     >
-                      Message
+                      Message{hasUnread ? ` (${unread})` : ""}
                     </button>
 
-                    {/* The Details button + modal */}
                     <UserDetailsAction user={u} className="sp-btn" />
 
                     {onMeals && (
@@ -154,4 +149,4 @@ const UserTable: React.FC<Props> = ({
   );
 };
 
-export default UserTable;
+export default UsersTable;

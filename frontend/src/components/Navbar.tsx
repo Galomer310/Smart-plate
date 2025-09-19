@@ -1,70 +1,85 @@
 // frontend/src/components/Navbar.tsx
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
-import type { RootState } from "../store/srote"; // ✅ ensure this path matches your project
-import { logout } from "../store/authSlice"; // ✅
-import axios from "axios";
+import type { RootState } from "../store/srote";
+import { logout } from "../store/authSlice";
+import api from "../api"; // ✅ use your typed axios instance
 import logo from "../assets/smart-plate-logo.jpeg";
 
+type UnreadRes = { messages: any[] }; // shape returned by GET /api/messages/new
+
 const Navbar: React.FC = () => {
-  const tokenFromStore = useSelector((state: RootState) => state.auth.token);
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const location = useLocation();
 
-  // Prefer Redux token; fallback to explicit admin token for admin area
-  const token = tokenFromStore || localStorage.getItem("adminToken") || "";
+  // Prefer Redux token; fallback to localStorage (user/admin)
+  const tokenFromStore = useSelector((s: RootState) => s.auth.token);
+  const userToken =
+    typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+  const adminToken =
+    typeof window !== "undefined" ? localStorage.getItem("adminToken") : null;
+  const token = tokenFromStore || userToken || adminToken || "";
 
-  // Determine role from token payload
+  // Decode role from JWT to decide routing
   let isAdmin = false;
   if (token) {
     try {
-      const payloadBase64 = token.split(".")[1];
-      if (payloadBase64) {
-        const decoded = JSON.parse(atob(payloadBase64));
-        isAdmin = decoded?.role === "admin";
-      }
-    } catch (error) {
-      console.error("Error decoding token in Navbar:", error);
+      const decoded = JSON.parse(atob(token.split(".")[1]));
+      isAdmin = decoded?.role === "admin";
+    } catch {
+      // ignore decode errors
     }
   }
 
-  // Fetch unread for current principal (user OR admin)
-  useEffect(() => {
-    if (!token) return;
-    axios
-      .get("http://localhost:5000/api/messages/new", {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      .then((response) => {
-        const data = response.data as { messages: any[] };
-        setUnreadCount(data.messages.length || 0);
-      })
-      .catch((error) => {
-        console.error("Error fetching unread messages in Navbar:", error);
-      });
-  }, [token]);
+  // Unread count (works for both roles via /api/messages/new)
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const handleMessagesClick = () => setUnreadCount(0);
+  const fetchUnread = async () => {
+    if (!token) {
+      setUnreadCount(0);
+      return;
+    }
+    try {
+      // ✅ TYPE THE RESPONSE so TS knows .messages exists
+      const r = await api.get<UnreadRes>("/api/messages/new");
+      const count = Array.isArray(r.data.messages) ? r.data.messages.length : 0;
+      setUnreadCount(count);
+    } catch {
+      setUnreadCount(0);
+    }
+  };
+
+  useEffect(() => {
+    fetchUnread();
+    // also refetch when route changes (cheap polling surrogate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, location.pathname]);
 
   const msgLink = isAdmin ? "/admin/messages" : "/messages";
 
-  const linkStyle =
-    unreadCount > 0
-      ? {
-          padding: "2px 8px",
-          borderRadius: 999,
-          color: "#fff",
-          background: "#d32f2f",
-        }
-      : undefined;
+  const onClickMessages = () => {
+    // Clear the pill immediately for snappier UX; server will mark-as-read on fetch
+    setUnreadCount(0);
+  };
 
   const handleLogout = () => {
     dispatch(logout());
     localStorage.removeItem("adminToken");
+    localStorage.removeItem("accessToken");
     navigate("/");
   };
+
+  const msgStyle =
+    unreadCount > 0
+      ? {
+          padding: "2px 10px",
+          borderRadius: 999,
+          color: "#fff",
+          background: "#d32f2f", // solid red when unread
+        }
+      : undefined;
 
   return (
     <nav
@@ -76,6 +91,7 @@ const Navbar: React.FC = () => {
         justifyContent: "space-between",
       }}
     >
+      {/* Left: Brand */}
       <div style={{ display: "flex", alignItems: "center" }}>
         <img
           src={logo}
@@ -100,6 +116,7 @@ const Navbar: React.FC = () => {
         </Link>
       </div>
 
+      {/* Right: Nav Links */}
       <ul
         style={{
           listStyleType: "none",
@@ -107,15 +124,17 @@ const Navbar: React.FC = () => {
           gap: "1rem",
           margin: 0,
           padding: 0,
+          alignItems: "center",
         }}
       >
         <li>
           <Link to="/">Home</Link>
         </li>
 
+        {/* Messages (visible when logged in as user or admin) */}
         {token && (
           <li>
-            <Link to={msgLink} onClick={handleMessagesClick} style={linkStyle}>
+            <Link to={msgLink} onClick={onClickMessages} style={msgStyle}>
               Messages {unreadCount > 0 && <span>({unreadCount})</span>}
             </Link>
           </li>
@@ -125,6 +144,7 @@ const Navbar: React.FC = () => {
           <Link to="/admin/login">Admin</Link>
         </li>
 
+        {/* Auth area */}
         {token ? (
           <>
             {!isAdmin && (
@@ -148,11 +168,9 @@ const Navbar: React.FC = () => {
             </li>
           </>
         ) : (
-          <>
-            <li>
-              <Link to="/login">Login</Link>
-            </li>
-          </>
+          <li>
+            <Link to="/login">Login</Link>
+          </li>
         )}
       </ul>
     </nav>

@@ -35,7 +35,7 @@ async function ensureMessagingAdminUserId(): Promise<string> {
     `SELECT id, email, COALESCE(name, 'Admin') AS name FROM admins ORDER BY created_at ASC LIMIT 1`
   );
   const admin = tryAdmin.rows[0];
-  if (!admin) throw new Error("No admin found in `admins` table");
+  if (!admin) throw new Error("No admin found in \`admins\` table");
 
   // 3) Insert a shadow admin into USERS for messaging FK compatibility
   const password_hash = await bcrypt.hash("!disabled-account!", 10);
@@ -66,11 +66,7 @@ async function getMessagingUserId(req: AuthedRequest): Promise<string> {
 
 /* ------------------------------- Routes -------------------------------- */
 
-/**
- * GET /api/messages/new
- * Unread messages for the current principal (user OR admin).
- * Used by Navbar badge. (Fixes your 404.)
- */
+/** Unread for navbar pill */
 router.get("/new", requireAuth, async (req: AuthedRequest, res) => {
   try {
     const me = await getMessagingUserId(req);
@@ -90,10 +86,7 @@ router.get("/new", requireAuth, async (req: AuthedRequest, res) => {
   }
 });
 
-/**
- * GET /api/messages/my-admin
- * User resolves the *messaging admin user id* (from USERS, not ADMINS).
- */
+/** Resolve admin (returns USERS.id to satisfy FK) */
 router.get("/my-admin", requireAuth, async (req: AuthedRequest, res) => {
   if (req.user!.role !== "user")
     return res.status(403).json({ error: "Forbidden" });
@@ -107,9 +100,9 @@ router.get("/my-admin", requireAuth, async (req: AuthedRequest, res) => {
 });
 
 /**
- * GET /api/messages/threads
- * Admin: show threads with users who have messaged (or were messaged).
- * User: fabricate a single admin thread (exists even if no messages yet).
+ * Threads:
+ *  - admin → list user threads with last message + unread count
+ *  - user  → single “admin” thread summary, even if empty
  */
 router.get("/threads", requireAuth, async (req: AuthedRequest, res) => {
   try {
@@ -143,6 +136,8 @@ router.get("/threads", requireAuth, async (req: AuthedRequest, res) => {
           COALESCE(un.unread_count, 0) AS unread_count
         FROM last_msg lm
         JOIN users u ON u.id = lm.other_id
+        /* 🔧 FIX: actually join the unread CTE alias 'un' */
+        LEFT JOIN unread un ON un.other_id = lm.other_id
         LEFT JOIN messages m
           ON (
             (m.sender_id = $1 AND m.recipient_id = lm.other_id) OR
@@ -157,7 +152,7 @@ router.get("/threads", requireAuth, async (req: AuthedRequest, res) => {
 
       return res.json({ threads: rows });
     } else {
-      // user
+      // user → fabricate a single 'admin' thread summary
       const me = req.user!.id || req.user!.sub!;
       const adminId = await ensureMessagingAdminUserId();
 
@@ -190,15 +185,12 @@ router.get("/threads", requireAuth, async (req: AuthedRequest, res) => {
       return res.json({ threads: rows });
     }
   } catch (e) {
-    console.error("[GET /messages/threads]", e);
+    console.error("[GET /messages/threads] error:", e);
     return res.status(500).json({ error: "Failed to load threads" });
   }
 });
 
-/**
- * GET /api/messages/conversation/:otherId?before&limit
- * Returns messages ASC and marks incoming as read.
- */
+/** Conversation + mark incoming as read */
 router.get(
   "/conversation/:otherId",
   requireAuth,
@@ -255,10 +247,7 @@ router.get(
   }
 );
 
-/**
- * POST /api/messages/:otherId  { body }
- * Send message me → otherId (FK-safe for both roles).
- */
+/** Send */
 router.post("/:otherId", requireAuth, async (req: AuthedRequest, res) => {
   try {
     const me = await getMessagingUserId(req);

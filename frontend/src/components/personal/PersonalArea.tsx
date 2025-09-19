@@ -1,3 +1,4 @@
+// frontend/src/components/personal/PersonalArea.tsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api";
@@ -26,8 +27,6 @@ const PersonalArea: React.FC = () => {
   const [plan, setPlan] = useState<PlanInfo | null>(null);
 
   const [meals, setMeals] = useState<MealsState | null>(null);
-  const [hasUnread, setHasUnread] = useState(false);
-
   const [editing, setEditing] = useState<
     null | "breakfast" | "lunch" | "dinner"
   >(null);
@@ -49,26 +48,25 @@ const PersonalArea: React.FC = () => {
     setLoading(true);
     setLoadError(null);
     try {
-      // 1) Do we need to fill the questionnaire?
+      // 1) Questionnaire done?
       const r = await api.get<QuestionnaireGet>("/api/user/questionnaire");
       const exists = r.data.exists === true;
       setNeedsQuestionnaire(!exists);
 
-      // If questionnaire not done yet -> allow it first (as per your flow)
       if (!exists) {
         setPlan(null);
         setMeals(null);
         return;
       }
 
-      // 2) Questionnaire exists: enforce password change BEFORE entering personal area
+      // 2) Enforce password change BEFORE entering personal area
       const me = await api.get<{ mustChangePassword: boolean }>("/api/auth/me");
       if (me.data.mustChangePassword) {
         navigate("/force-password-change", { replace: true });
         return;
       }
 
-      // 3) Load rest of the personal area
+      // 3) Load plan + meals
       try {
         const planRes = await api.get<PlanInfo>("/api/user/plan");
         setPlan(planRes.data);
@@ -83,26 +81,11 @@ const PersonalArea: React.FC = () => {
     }
   };
 
-  const loadUnread = async () => {
-    try {
-      const r = await api.get<{ threads: Array<{ unread_count: number }> }>(
-        "/api/messages/threads"
-      );
-      const unread = Number(r.data.threads?.[0]?.unread_count ?? 0) > 0;
-      setHasUnread(unread);
-    } catch {
-      setHasUnread(false);
-    }
-  };
-
   useEffect(() => {
-    (async () => {
+    void (async () => {
       await loadStatus();
-      await loadUnread();
     })();
-  }, []);
-
-  const openMessages = () => navigate("/messages");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSaved = (
     mealName: "breakfast" | "lunch" | "dinner" | null,
@@ -148,13 +131,7 @@ const PersonalArea: React.FC = () => {
         <div className="sp-card" style={{ color: "#b00020" }}>
           {loadError}
         </div>
-        <button
-          className="sp-badge"
-          onClick={() => {
-            loadStatus();
-            loadUnread();
-          }}
-        >
+        <button className="sp-badge" onClick={() => loadStatus()}>
           נסה שוב
         </button>
       </div>
@@ -176,16 +153,8 @@ const PersonalArea: React.FC = () => {
   // Normal personal area
   return (
     <div className="sp-personal">
-      <PlanHeader plan={plan} onOpenMessages={openMessages} />
-      <div style={{ margin: "8px 0" }}>
-        <button
-          className="sp-badge"
-          onClick={openMessages}
-          style={hasUnread ? { color: "#b00020" } : undefined}
-        >
-          הודעות
-        </button>
-      </div>
+      {/* Messages buttons removed here & in PlanHeader → use Navbar */}
+      <PlanHeader plan={plan} />
 
       <div className="sp-main-grid">
         <PlatePlanner

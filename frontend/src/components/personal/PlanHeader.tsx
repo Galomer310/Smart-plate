@@ -1,3 +1,4 @@
+// frontend/src/components/personal/PlanHeader.tsx
 import React, { useMemo } from "react";
 import type { PlanInfo } from "./types";
 import PlanCalendar from "./PlanCalender";
@@ -26,21 +27,16 @@ function parseDate(input?: any): Date | null {
   return null;
 }
 
-type Props = {
-  plan: PlanInfo | null;
-  onOpenMessages?: () => void;
-};
+type Props = { plan: PlanInfo | null };
 
-const PlanHeader: React.FC<Props> = ({ plan, onOpenMessages }) => {
-  // Safely format dates; show "—" when invalid/missing
+const PlanHeader: React.FC<Props> = ({ plan }) => {
   const enroll = parseDate(plan?.enrollDate);
   const start = parseDate(plan?.startDate);
   const end = parseDate(plan?.endDate);
 
   const fmt = (d: Date | null) => (d ? d.toLocaleDateString() : "—");
 
-  // If plan.todayDietDay / plan.dietDays / plan.expired are missing,
-  // derive them from start/end so the badge never shows "undefined/null".
+  // Derive todayDietDay / dietDays / expired when missing
   const derived = useMemo(() => {
     const today = new Date();
     const dayOnly = new Date(
@@ -75,7 +71,6 @@ const PlanHeader: React.FC<Props> = ({ plan, onOpenMessages }) => {
     return { todayDietDay, dietDays, expired };
   }, [plan?.startDate, plan?.endDate]);
 
-  // Merge derived values with the plan (without mutating the prop)
   const normalizedPlan: PlanInfo | null = plan
     ? {
         ...plan,
@@ -87,7 +82,7 @@ const PlanHeader: React.FC<Props> = ({ plan, onOpenMessages }) => {
 
   return (
     <div className="sp-plan-header">
-      {/* Diet Day / quick actions */}
+      {/* Top card: badge + dates */}
       <div>
         <DietDayBadge plan={normalizedPlan} />
         <div
@@ -110,9 +105,7 @@ const PlanHeader: React.FC<Props> = ({ plan, onOpenMessages }) => {
               <strong>סיום תוכנית:</strong> {fmt(end)}
             </div>
           </div>
-          <button className="sp-badge" onClick={onOpenMessages}>
-            הודעות
-          </button>
+          {/* Messages button removed – use Navbar instead */}
         </div>
       </div>
 
